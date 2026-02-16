@@ -1,0 +1,151 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0a0b0c;
+  --bg2:       #0f1214;
+  --bg3:       #141a1a;
+  --cyan:      #00e5cc;
+  --cyan-dim:  rgba(0,229,204,0.15);
+  --cyan-glow: rgba(0,229,204,0.4);
+  --pink:      #ff2d78;
+  --pink-dim:  rgba(255,45,120,0.15);
+  --orange:    #ff6b35;
+  --white:     rgba(255,255,255,0.85);
+  --muted:     rgba(255,255,255,0.4);
+  --border:    rgba(0,229,204,0.2);
+  --font:      'Share Tech Mono', monospace;
+  --font2:     'Rajdhani', sans-serif;
+}
+
+html, body { height: 100%; background: var(--bg); color: var(--white); font-family: var(--font); }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.hud-card {
+  background: rgba(10,15,15,0.85);
+  border: 1px solid var(--border);
+  position: relative;
+  padding: 24px;
+}
+.hud-card::before {
+  content: '';
+  position: absolute;
+  top: -1px; left: -1px;
+  width: 12px; height: 12px;
+  border-top: 2px solid var(--cyan);
+  border-left: 2px solid var(--cyan);
+  pointer-events: none;
+}
+.hud-card::after {
+  content: '';
+  position: absolute;
+  bottom: -1px; right: -1px;
+  width: 12px; height: 12px;
+  border-bottom: 2px solid var(--cyan);
+  border-right: 2px solid var(--cyan);
+  pointer-events: none;
+}
+
+.label {
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.cyan { color: var(--cyan); }
+.cyan-glow {
+  color: var(--cyan);
+  text-shadow: 0 0 20px var(--cyan-glow), 0 0 40px rgba(0,229,204,0.2);
+}
+.pink { color: var(--pink); }
+
+.bar-track { height: 3px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; }
+.bar-fill  { height: 100%; border-radius: 2px; transition: width 0.8s ease; }
+
+.btn-ctos {
+  font-family: var(--font2);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  padding: 14px 40px;
+  background: transparent;
+  border: 1px solid var(--cyan);
+  color: var(--cyan);
+  cursor: pointer;
+  position: relative;
+  transition: all 0.25s;
+}
+.btn-ctos:hover {
+  background: var(--cyan-dim);
+  box-shadow: 0 0 24px var(--cyan-glow);
+}
+.btn-ctos::before {
+  content: '';
+  position: absolute;
+  top: -1px; left: -1px;
+  width: 8px; height: 8px;
+  border-top: 2px solid var(--cyan);
+  border-left: 2px solid var(--cyan);
+}
+.btn-ctos::after {
+  content: '';
+  position: absolute;
+  bottom: -1px; right: -1px;
+  width: 8px; height: 8px;
+  border-bottom: 2px solid var(--cyan);
+  border-right: 2px solid var(--cyan);
+}
+
+.ctos-input {
+  width: 100%;
+  background: rgba(0,229,204,0.04);
+  border: 1px solid rgba(0,229,204,0.25);
+  border-radius: 2px;
+  padding: 14px 50px 14px 18px;
+  color: var(--white);
+  font-family: var(--font);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.ctos-input:focus { border-color: var(--cyan); box-shadow: 0 0 12px rgba(0,229,204,0.15); }
+.ctos-input::placeholder { color: var(--muted); }
+
+.dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; }
+.dot-green  { background: #00ff88; box-shadow: 0 0 8px #00ff88; }
+.dot-cyan   { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+.dot-orange { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
+
+.wdogs-bg {
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 30%, rgba(0,60,50,0.35) 0%, transparent 70%),
+    radial-gradient(ellipse 80% 60% at 20% 80%, rgba(0,30,40,0.4) 0%, transparent 60%),
+    linear-gradient(180deg, #060b0a 0%, #0a0f0e 50%, #060b0a 100%);
+  background-size: cover;
+  background-position: center;
+}
+
+.scanlines::after {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 2px,
+    rgba(0,0,0,0.025) 2px, rgba(0,0,0,0.025) 4px
+  );
+  pointer-events: none; z-index: 9999;
+}
+
+@keyframes flicker {
+  0%,100% { opacity: 1; } 92% { opacity: 1; } 93% { opacity: 0.6; }
+  94% { opacity: 1; } 96% { opacity: 0.8; } 97% { opacity: 1; }
+}
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes pulse { 0%,100% { opacity: 0.6; } 50% { opacity: 1; } }
+
+.anim-fade { animation: fadeIn 0.4s ease forwards; }

@@ -1,0 +1,48 @@
+# =============================================================================
+# Prof IA v5.4 — Configuration Fine-tuning QLoRA (AMD BC-250)
+# =============================================================================
+# USAGE : python train.py  (depuis le répertoire fine_tuning/)
+# Prérequis : arrêter Ollama avant (systemctl stop ollama) pour libérer la VRAM
+
+database:
+  # URL PostgreSQL 18.2 (même instance que le backend)
+  url: "postgresql://REDACTED_USER@localhost:5432/prof_ia_v5"
+
+model:
+  # Modèle de base à fine-tuner (Mistral 7B en fp16 ≈ 14 Go VRAM)
+  # IMPORTANT : arrêter Ollama avant de lancer le fine-tuning !
+  base_model: "mistralai/Mistral-7B-Instruct-v0.2"
+  # Répertoire de sortie du modèle LoRA adapté
+  output_dir: "/app/models/mistral-prof-ia-lora"
+
+dataset:
+  # Nombre max d'exemples Golden à récupérer depuis PostgreSQL
+  # Augmenter progressivement (100 → 250 → 500) selon les résultats
+  limit: 500
+  # Score minimum pour inclure un exemple dans le dataset
+  min_score: 0.85
+
+lora:
+  # Rang LoRA — 16 = bon compromis expressivité/VRAM pour BC-250
+  # Augmenter à 32 si le dataset > 300 exemples et VRAM suffisante
+  r: 16
+  alpha: 32
+  # Modules cibles pour Mistral 7B (architecture transformer)
+  target_modules:
+    - "q_proj"
+    - "v_proj"
+    - "k_proj"
+    - "o_proj"
+  dropout: 0.05
+
+training:
+  output_dir: "/app/models/mistral-prof-ia-lora"
+  num_epochs: 3
+  # batch_size=1 obligatoire avec 12 Go VRAM (fp16 Mistral 7B ≈ 14 Go brut)
+  # gradient_accumulation_steps=8 simule un batch effectif de 8
+  batch_size: 1
+  gradient_accumulation_steps: 8
+  learning_rate: 0.0002   # 2e-4 standard pour QLoRA
+  save_steps: 50
+  logging_steps: 10
+  warmup_steps: 20
