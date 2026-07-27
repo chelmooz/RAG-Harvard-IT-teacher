@@ -23,7 +23,7 @@ info " GFX override : $HSA_OVERRIDE_GFX_VERSION"
 info "========================================"
 
 # ── 1. Vérification du matériel ──────────────────────────────────────────────
-info "1/8 Vérification du matériel AMD..."
+info "1/9 Vérification du matériel AMD..."
 if ! lspci | grep -qi "Navi"; then
     warn "GPU AMD non détecté via lspci — continuer quand même ? (Ctrl+C pour annuler)"
     sleep 3
@@ -36,7 +36,7 @@ fi
 info "✅ /dev/kfd présent"
 
 # ── 2. Variables système permanentes ─────────────────────────────────────────
-info "2/8 Configuration variables ROCm permanentes..."
+info "2/9 Configuration variables ROCm permanentes..."
 ROCM_ENV="/etc/environment.d/99-rocm-bc250.conf"
 sudo tee "$ROCM_ENV" > /dev/null <<EOF
 HSA_OVERRIDE_GFX_VERSION=10.1.3
@@ -46,7 +46,7 @@ EOF
 info "✅ Variables écrites dans $ROCM_ENV"
 
 # ── 3. Paramètre kernel amdgpu.gttsize ────────────────────────────────────────
-info "3/8 Vérification gttsize (VRAM unifiée)..."
+info "3/9 Vérification gttsize (VRAM unifiée)..."
 GRUB_FILE="/etc/default/grub"
 CURRENT_CMD=$(grep "^GRUB_CMDLINE_LINUX_DEFAULT" "$GRUB_FILE" || echo "")
 if echo "$CURRENT_CMD" | grep -q "gttsize"; then
@@ -57,7 +57,7 @@ else
 fi
 
 # ── 4. Python 3.13 et dépendances système ────────────────────────────────────
-info "4/8 Dépendances système..."
+info "4/9 Dépendances système..."
 sudo apt-get update -qq
 sudo apt-get install -y --no-install-recommends \
     python3.13 python3.13-venv python3.13-dev \
@@ -67,7 +67,7 @@ sudo apt-get install -y --no-install-recommends \
     sudo apt-get install -y postgresql-client
 
 # ── 5. Environnement virtuel Python 3.13 ─────────────────────────────────────
-info "5/8 Création du venv Python 3.13..."
+info "5/9 Création du venv Python 3.13..."
 VENV_DIR="./venv"
 if [[ ! -d "$VENV_DIR" ]]; then
     python3.13 -m venv "$VENV_DIR"
@@ -78,7 +78,7 @@ source "$VENV_DIR/bin/activate"
 pip install --upgrade pip setuptools wheel -q
 
 # ── 6. PyTorch ROCm 7.2 ──────────────────────────────────────────────────────
-info "6/8 Installation PyTorch ROCm 7.2..."
+info "6/9 Installation PyTorch ROCm 7.2..."
 ROCM_INDEX="https://download.pytorch.org/whl/rocm7.2"
 
 # Vérifie si PyTorch ROCm est déjà installé
@@ -101,13 +101,13 @@ if torch.cuda.is_available():
 " || warn "Vérification PyTorch échouée (normal si GPU non accessible dans ce shell)"
 
 # ── 7. Dépendances Prof IA v5 ─────────────────────────────────────────────────
-info "7/8 Installation dépendances Prof IA v5..."
+info "7/9 Installation dépendances Prof IA v5..."
 pip install -r backend/requirements.txt \
     --index-url "$ROCM_INDEX" -q
 info "✅ Dépendances Python installées"
 
 # ── 8. Ollama ROCm ───────────────────────────────────────────────────────────
-info "8/8 Configuration Ollama ROCm..."
+info "8/9 Configuration Ollama ROCm..."
 if ! command -v ollama &>/dev/null; then
     info "Installation Ollama..."
     curl -fsSL https://ollama.ai/install.sh | sh
@@ -143,6 +143,25 @@ sleep 3
 info "Téléchargement du modèle Mistral 7B Q4_K_M (4,5 Go)..."
 HSA_OVERRIDE_GFX_VERSION=10.1.3 ollama pull mistral:7b-instruct-q4_K_M || \
     warn "Pull Ollama échoué — lancez manuellement : ollama pull mistral:7b-instruct-q4_K_M"
+
+# ── 9. Déblocage 40 CU (optionnel) ───────────────────────────────────────────
+info "9/9 Déblocage 40 CU RDNA2 (optionnel)..."
+echo ""
+warn "Le BC-250 sort d'usine avec 24 des 40 CUs actifs (16 fusionnés en firmware,"
+warn "pas endommagés). Un déblocage communautaire existe (crédit : duggasco,"
+warn "voir https://elektricm.github.io/amd-bc250-docs/system/40cu-unlock/) :"
+warn "  - Gain mesuré : ~1.61x en calcul (Vulkan pp512), effet quasi nul en 3D."
+warn "  - Reconstruit le module amdgpu hors-arbre : à refaire à chaque MAJ kernel."
+warn "  - Toutes les cartes ne se débloquent pas proprement (harvest pattern)."
+warn "  - Sustained load nécessite un plafond gouverneur à 1500 MHz + un bon refroidissement."
+warn "  - Réversible (sauvegarde du module d'origine)."
+echo ""
+read -rp "Lancer scripts/unlock-40cu.sh maintenant ? [o/N] " RUN_40CU
+if [[ "$RUN_40CU" =~ ^[oOyY]$ ]]; then
+    bash "$(dirname "$0")/scripts/unlock-40cu.sh"
+else
+    info "Ignoré. Vous pourrez le lancer plus tard avec : ./scripts/unlock-40cu.sh"
+fi
 
 # ── Résumé ───────────────────────────────────────────────────────────────────
 echo ""
