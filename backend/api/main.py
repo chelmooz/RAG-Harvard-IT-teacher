@@ -23,7 +23,7 @@ import uuid
 import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -125,11 +125,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — toutes origines autorisées (réseau local isolé, LAN derrière pare-feu)
+# CORS — piloté par settings.CORS_ORIGINS (.env), plus de wildcard codé en dur.
+# CORS_ORIGINS="*" reste possible en dev (voir warning _validate_cors), mais
+# en production il faut lister les origines exactes (ex: http://192.168.1.11:3000).
+_cors_origins = (
+    ["*"] if settings.CORS_ORIGINS.strip() == "*"
+    else [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,   # credentials=False obligatoire avec allow_origins=["*"]
+    allow_origins=_cors_origins,
+    allow_credentials=False,   # credentials=False obligatoire si "*" est dans allow_origins
     allow_methods=["*"],
     allow_headers=["*"],
 )

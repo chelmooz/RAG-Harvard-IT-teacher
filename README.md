@@ -13,8 +13,10 @@
 
 ```bash
 # 1. Prérequis : Docker Compose, GPU AMD BC-250 avec ROCm
-# 2. Clé secrète (optionnel mais recommandé en prod)
-echo "JWT_SECRET=votre_clé_secrète" > .env
+# 2. Configuration — OBLIGATOIRE (docker compose refuse de démarrer sans ça)
+cp .env.example .env
+python3 -c "import secrets; print('POSTGRES_PASSWORD=' + secrets.token_urlsafe(24))" >> .env
+python3 -c "import secrets; print('API_TOKEN=' + secrets.token_urlsafe(32))" >> .env
 
 # 3. Lancer la stack complète
 docker compose up -d
