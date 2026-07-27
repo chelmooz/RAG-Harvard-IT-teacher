@@ -1,10 +1,10 @@
-# Prof IA v5.4 — RAG Engine (pgvector)
+# Prof IA v6.0 — RAG Engine (pgvector)
 ## Documentation Technique
 
 **AMD BC-250 · Cyan Skillfish (RDNA2) · ROCm 7.2**  
 *À destination des Web Designers · DevOps · Administrateurs Système · Étudiants TSSR / AIS / DevOps*
 
-> **Baseline active : v5.4 (PROJET GITHUB/)** — Backend vectoriel PostgreSQL + pgvector.  
+> **Baseline active : v6.0 (PROJET GITHUB/)** — Backend vectoriel PostgreSQL + pgvector.  
 > Versions antérieures archivées dans `_archive/` (v5.5, v5.8.3 ChromaDB).
 
 ---
@@ -22,7 +22,13 @@ docker compose up -d
 # 4. Vérifier l'état
 curl http://localhost:8001/health
 
-# 5. Build avec GPU ROCm (défaut) ou CPU uniquement
+# 5. Tester le chat RAG (remplacer <token> par votre API_TOKEN)
+curl -X POST http://localhost:8001/chat \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"Qu'\''est-ce que TCP/IP ?","metier":"TSSR"}'
+
+# 6. Build avec GPU ROCm (défaut) ou CPU uniquement
 docker compose build --build-arg USE_ROCM=false backend
 ```
 
@@ -35,7 +41,7 @@ docker compose build --build-arg USE_ROCM=false backend
 
 ## Table des matières
 
-1. [Caractéristiques de la Stack v5.4](#1-caractéristiques-de-la-stack-v54)
+1. [Caractéristiques de la Stack v6.0](#1-caractéristiques-de-la-stack-v60)
 2. [Paquets Installés et Versions](#2-paquets-installés-et-versions)
 3. [Architecture — PostgreSQL + pgvector HNSW](#3-architecture--postgresql--pgvector-hnsw)
 4. [Formats de Fichiers Supportés](#4-formats-de-fichiers-supportés)
@@ -46,7 +52,7 @@ docker compose build --build-arg USE_ROCM=false backend
 
 ---
 
-## 1. Caractéristiques de la Stack v5.8.3
+## 1. Caractéristiques de la Stack v6.0
 
 ### 1.1 Matériel — AMD BC-250 (Cyan Skillfish)
 
@@ -573,5 +579,5 @@ Navigateur PC Windows (192.168.1.16)
 
 ---
 
-*Document généré le 18 Février 2026 — Prof IA v5.8.3 ALL-IN-ONE pour AMD BC-250 (Cyan Skillfish / RDNA2)*  
+*Document généré le 27 Juillet 2026 — Prof IA v6.0 ALL-IN-ONE pour AMD BC-250 (Cyan Skillfish / RDNA2)*  
 *Stack : Debian 13.3 · Kernel 6.18 · Mesa 26.0 · ROCm 7.2 · PyTorch 2.11 · PostgreSQL 18.2 · ChromaDB 0.4.22*

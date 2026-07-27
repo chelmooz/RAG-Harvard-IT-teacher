@@ -1,17 +1,17 @@
 """
-Configuration v5.4 — Prof IA (AMD BC-250 / Cyan Skillfish)
+Configuration v6.0 — Prof IA (AMD BC-250 / Cyan Skillfish)
 ============================================================
 Calibrée pour :
   - 16 Go GDDR6 unifiée (amdgpu.gttsize=12288 → 12 Go VRAM disponibles)
   - 6 cœurs Zen 2 / 24 CUs RDNA2
   - ROCm 7.2 + PyTorch 2.11+ / Python 3.13
 
-CORRECTIFS v5.4 :
+CORRECTIFS v6.0 :
   - pg18    : PostgreSQL 18.2 (cohérent avec toute la documentation)
   - Ports   : tout ouvert — réseau local isolé (LAN derrière pare-feu)
   - CORS    : toutes origines autorisées (*)
   - JWT     : validation assouplie — token utilisé pour l'auth GitHub datasets
-CORRECTIFS v5.4 CONSERVÉS :
+CORRECTIFS v6.0 CONSERVÉS :
   - FIX BUG#1 : main.py créé
   - FIX BUG#2 : Dockerfiles créés
   - FIX BUG#3 : nginx.conf créé
@@ -29,8 +29,8 @@ from loguru import logger
 class Settings(BaseSettings):
 
     # ── Application ─────────────────────────────────────────────
-    APP_NAME:    str  = "Prof IA v5.4 (BC-250)"
-    APP_VERSION: str  = "5.4.0"
+    APP_NAME:    str  = "Prof IA v6.0 (BC-250)"
+    APP_VERSION: str  = "6.0.0"
     DEBUG:       bool = False
 
     # ── PostgreSQL (unique backend : conversations + vecteurs) ──
@@ -84,7 +84,7 @@ class Settings(BaseSettings):
     MODELS_DIR: str = "/app/models"
     LOGS_DIR:   str = "/app/data/logs"
 
-    # v5.3 : validateur JWT supprimé — token libre pour auth GitHub datasets
+    # v6.0 : validateur JWT supprimé — token libre pour auth GitHub datasets
 
     model_config = {
         "env_file": ".env",

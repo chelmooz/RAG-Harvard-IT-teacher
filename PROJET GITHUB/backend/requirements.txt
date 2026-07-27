@@ -1,5 +1,5 @@
 # =============================================================================
-# Prof IA v5.1 — Requirements (AMD BC-250 / ROCm 7.2 / Python 3.13)
+# Prof IA v6.0 — Requirements (AMD BC-250 / ROCm 7.2 / Python 3.13)
 # =============================================================================
 # INSTALLATION :
 #   pip install -r requirements.txt \
@@ -88,7 +88,7 @@ pytest-asyncio==0.23.8
 #   PyPDF2         → remplacé par pypdf (successeur officiel, mieux maintenu)
 #   ebooklib       → non utilisé dans le pipeline
 #
-# CORRECTIFS v5.1 :
+# CORRECTIFS v6.0 :
 #   numpy==1.26.4  → numpy>=1.26,<3 (compatible numpy 2.x)
 #   httpx doublon  → supprimé (une seule entrée)
 #   pyyaml         → ajouté (manquait pour fine_tuning/train.py)

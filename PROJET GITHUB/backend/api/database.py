@@ -1,12 +1,12 @@
 """
-Database v5.4 — Prof IA (AMD BC-250)
+Database v6.0 — Prof IA (AMD BC-250)
 ======================================
 Source de vérité unique pour :
   - Le pool asyncpg partagé (réutilisé par RAGEngine — FIX BUG#3)
   - Le schéma PostgreSQL complet (conversations, RAG, évaluations — FIX W10)
   - Les index HNSW et conversations
 
-CORRECTIFS v5.4 :
+CORRECTIFS v6.0 :
   - FIX BUG#4 : contrainte UNIQUE(file_id, chunk_index) ajoutée sur rag_chunks
   - FIX W10   : seul database.py définit le schéma — rag_engine.py ne crée plus rien
   - FIX W13   : get_db() thread-safe via asyncio.Lock (évite les races à l'init)
@@ -199,7 +199,7 @@ async def init_db() -> asyncpg.Pool:
         version = await conn.fetchval("SELECT version();")
         logger.info(f"✅ PostgreSQL : {version[:60]}")
 
-    logger.info("✅ Schéma v5.4 initialisé (pgvector HNSW + UNIQUE rag_chunks)")
+    logger.info("✅ Schéma v6.0 initialisé (pgvector HNSW + UNIQUE rag_chunks)")
     return _pool
 
 

@@ -1,7 +1,7 @@
 # =============================================================================
-# Prof IA v5.4 — docker-compose AMD BC-250 (Cyan Skillfish / RDNA2)
+# Prof IA v6.0 — docker-compose AMD BC-250 (Cyan Skillfish / RDNA2)
 # =============================================================================
-# CORRECTIFS v5.3 :
+# CORRECTIFS v6.0 :
 #   pg18  : PostgreSQL 18.2 + pgvector (cohérent avec toute la documentation)
 #   Ports : tous les services accessibles sur 0.0.0.0 (réseau local isolé)
 #   CORS  : toutes origines autorisées (* — usage LAN uniquement)
@@ -14,7 +14,7 @@ services:
   # PostgreSQL 18.2 + pgvector
   postgres:
     image: pgvector/pgvector:pg18
-    container_name: prof-ia-postgres-v5.4
+    container_name: prof-ia-postgres-v6.0
     restart: unless-stopped
     environment:
       POSTGRES_DB:              prof_ia_v5
@@ -81,7 +81,7 @@ services:
       args:
         PYTHON_VERSION: "3.13"
         USE_ROCM: "true"
-    container_name: prof-ia-backend-v5.4
+    container_name: prof-ia-backend-v6.0
     restart: unless-stopped
     devices:
       - /dev/kfd:/dev/kfd
@@ -138,11 +138,11 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: prof-ia-frontend-v5.4
+    container_name: prof-ia-frontend-v6.0
     restart: unless-stopped
     environment:
       - REACT_APP_API_URL=http://localhost:8001
-      - REACT_APP_VERSION=5.4.0
+      - REACT_APP_VERSION=6.0.0
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -157,7 +157,7 @@ services:
   # Nginx reverse proxy
   nginx:
     image: nginx:alpine
-    container_name: prof-ia-nginx-v5.4
+    container_name: prof-ia-nginx-v6.0
     restart: unless-stopped
     ports:
       - "0.0.0.0:8080:80"

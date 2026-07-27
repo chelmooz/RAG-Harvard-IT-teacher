@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 const SESSIONS = ['Recherche sécu', 'Audit infra', 'Documentation API'];
 
 const INIT_MESSAGES = [
-  { role: 'sys', text: '[SYS] ctOS_RAG v5.5 initialized. Local knowledge base loaded.' },
+  { role: 'sys', text: '[SYS] ctOS_RAG v6.0 initialized. Local knowledge base loaded.' },
   { role: 'user', text: 'Quels sont les documents disponibles sur la sécurité réseau ?' },
   { role: 'rag', lines: [
     'ctOS_RAG >',
@@ -52,7 +52,7 @@ export default function Terminal() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <span style={{ color: '#00e5cc', fontSize: 12 }}>›_</span>
             <span style={{ color: '#00e5cc', fontSize: 14, letterSpacing: 2 }}>ctOS_RAG</span>
-            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>v5.5</span>
+            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>v6.0</span>
           </div>
         </div>
 
@@ -102,7 +102,7 @@ export default function Terminal() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ color: '#00e5cc', opacity: 0.6 }}>›_</span>
             <span style={{ color: '#00e5cc', letterSpacing: 2 }}>ctOS_RAG</span>
-            <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11 }}>v5.5</span>
+            <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11 }}>v6.0</span>
           </div>
           <div style={{ display: 'flex', gap: 20, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
             <span><span className="dot dot-cyan" />LOCAL</span>

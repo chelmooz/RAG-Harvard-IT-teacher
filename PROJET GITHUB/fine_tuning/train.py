@@ -1,5 +1,5 @@
 """
-Prof IA v5.0 — Fine-tuning QLoRA sur AMD BC-250 (ROCm 7.2)
+Prof IA v6.0 — Fine-tuning QLoRA sur AMD BC-250 (ROCm 7.2)
 ============================================================
 DIFFÉRENCES VS v4 (qui ciblait CUDA) :
   1. BitsAndBytesConfig désactivé → quantification manuelle AWQ/GPTQ
@@ -84,7 +84,7 @@ def format_for_sft(records: list[dict]) -> list[dict]:
 
 
 def main():
-    logger.info("🚀 Prof IA v5.0 — Fine-tuning QLoRA (AMD BC-250 / ROCm 7.2)")
+    logger.info("🚀 Prof IA v6.0 — Fine-tuning QLoRA (AMD BC-250 / ROCm 7.2)")
 
     config = load_config()
     db_url = config.get("database", {}).get(

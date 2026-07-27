@@ -48,7 +48,7 @@ export default function DesignPicker() {
       </div>
 
       <div style={{ position: 'absolute', bottom: 20, fontSize: 10, letterSpacing: 3, color: 'rgba(255,255,255,0.2)' }}>
-        PROF_IA v5.5 // ctOS DESIGN SYSTEM // WATCH_DOGS THEME
+        PROF_IA v6.0 // ctOS DESIGN SYSTEM // WATCH_DOGS THEME
       </div>
     </div>
   );

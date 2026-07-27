@@ -1,10 +1,10 @@
 """
-Prof IA v5.4 — Point d'entrée FastAPI (AMD BC-250 / Cyan Skillfish)
+Prof IA v6.0 — Point d'entrée FastAPI (AMD BC-250 / Cyan Skillfish)
 ====================================================================
-CORRECTIFS v5.2 :
+CORRECTIFS v6.0 :
   - FIX BUG#1 : Ce fichier était absent — application ne pouvait pas démarrer
-  - FIX BUG#4 : register_vector() appelé au startup (voir database.py v5.2)
-  - FIX BUG#5 : num_gpu corrigé dans RAGEngine (voir rag_engine.py v5.2)
+  - FIX BUG#4 : register_vector() appelé au startup (voir database.py v6.0)
+  - FIX BUG#5 : num_gpu corrigé dans RAGEngine (voir rag_engine.py v6.0)
 
 Architecture des endpoints :
   GET  /health              — santé de l'application (DB + Ollama + GPU)
@@ -81,7 +81,7 @@ async def lifespan(app: FastAPI):
     """
     global _rag_engine, _doc_processor
 
-    logger.info("🚀 Démarrage Prof IA v5.4 (AMD BC-250)...")
+    logger.info("🚀 Démarrage Prof IA v6.0 (AMD BC-250)...")
 
     # FIX BUG#4 : init_db() appelle maintenant register_vector(pool)
     # Le codec pgvector est enregistré avant toute requête vectorielle.
@@ -100,12 +100,12 @@ async def lifespan(app: FastAPI):
     _doc_processor = DocumentProcessor(upload_dir=settings.UPLOAD_DIR)
     logger.info("✅ Document Processor initialisé")
 
-    logger.info(f"🟢 Prof IA v5.4 prêt — {settings.APP_NAME}")
+    logger.info(f"🟢 Prof IA v6.0 prêt — {settings.APP_NAME}")
 
     yield  # Application en service
 
     # Shutdown
-    logger.info("🔴 Arrêt de Prof IA v5.4...")
+    logger.info("🔴 Arrêt de Prof IA v6.0...")
     if _rag_engine:
         await _rag_engine.close()
     if _doc_processor:

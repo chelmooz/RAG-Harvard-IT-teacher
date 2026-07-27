@@ -1,7 +1,7 @@
 """
-Document Processor v5.1 — AMD BC-250 (Cyan Skillfish)
+Document Processor v6.0 — AMD BC-250 (Cyan Skillfish)
 =======================================================
-CORRECTIFS v5.1 appliqués :
+CORRECTIFS v6.0 appliqués :
   - FIX W8  : Whisper device via torch.cuda.is_available() (plus robuste que HSA env var)
   - FIX W9  : Singleton Whisper — self._whisper_model évite le rechargement à chaque fichier
   - FIX W10 : Import PyPDF2 remplacé par pypdf (pypdf est le successeur maintenu de PyPDF2)
@@ -15,11 +15,13 @@ OPTIMISATIONS CONSERVÉES :
 """
 
 import asyncio
-import os
-import uuid
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from loguru import logger
+
+# ── Settings ──────────────────────────────────────────────────────────────────
+from .config import get_settings
+settings = get_settings()
 
 # ── Extraction documents ───────────────────────────────────────────────────────
 # pypdf est le successeur officiel de PyPDF2 (même API, mieux maintenu)
@@ -56,12 +58,11 @@ class DocumentProcessor:
         ".wav":  "audio",
     }
 
-    # Séparateurs hiérarchiques : paragraphe > ligne > phrase > mot > char
-    # chunk_size=400 : embeddings plus précis pour le recall pgvector HNSW
-    # chunk_overlap=80 : préserve le contexte inter-chunks
+# Séparateurs hiérarchiques : paragraphe > ligne > phrase > mot > char
+    # chunk_size / chunk_overlap depuis config.py (settings)
     _SPLITTER = RecursiveCharacterTextSplitter(
-        chunk_size=400,
-        chunk_overlap=80,
+        chunk_size=settings.CHUNK_SIZE,
+        chunk_overlap=settings.CHUNK_OVERLAP,
         separators=["\n\n", "\n", ". ", " ", ""],
         length_function=len,
     )
@@ -317,7 +318,7 @@ class DocumentProcessor:
         dir_path = Path(directory).resolve(strict=False)
         # Whitelist : seuls les sous-répertoires de upload_dir sont autorisés
         allowed = self.upload_dir.resolve()
-        if not str(dir_path).startswith(str(allowed)):
+        if not dir_path.is_relative_to(allowed):
             raise ValueError(
                 f"Chemin refusé : {dir_path} — seuls les sous-répertoires de "
                 f"{allowed} sont autorisés"

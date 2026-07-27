@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Prof IA v5.4 — Script d'installation AMD BC-250 (Cyan Skillfish / RDNA2)
+# Prof IA v6.0 — Script d'installation AMD BC-250 (Cyan Skillfish / RDNA2)
 # OS : Debian 13.3 (Trixie) | Kernel 6.18.10 | Mesa 26.0 | ROCm 7.2
 # =============================================================================
 set -euo pipefail
@@ -17,7 +17,7 @@ export ROCR_VISIBLE_DEVICES="0"
 export PYTORCH_HIP_ALLOC_CONF="max_split_size_mb:512"
 
 info "========================================"
-info " Prof IA v5.4 — Setup AMD BC-250"
+info " Prof IA v6.0 — Setup AMD BC-250"
 info " Architecture : Cyan Skillfish (RDNA2)"
 info " GFX override : $HSA_OVERRIDE_GFX_VERSION"
 info "========================================"

@@ -1,5 +1,5 @@
 /**
- * Service API pour Prof IA v5.4
+  * Service API pour Prof IA v6.0
  * Centralise tous les appels au backend FastAPI
  * 
  * À placer dans : /frontend/src/services/api.js

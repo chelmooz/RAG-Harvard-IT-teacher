@@ -1,5 +1,5 @@
 # =============================================================================
-# Prof IA v5.4 — Configuration Fine-tuning QLoRA (AMD BC-250)
+# Prof IA v6.0 — Configuration Fine-tuning QLoRA (AMD BC-250)
 # =============================================================================
 # USAGE : python train.py  (depuis le répertoire fine_tuning/)
 # Prérequis : arrêter Ollama avant (systemctl stop ollama) pour libérer la VRAM

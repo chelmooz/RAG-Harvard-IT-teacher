@@ -1,5 +1,5 @@
 # =============================================================================
-# Prof IA v5.2 — Dockerfile Frontend React
+# Prof IA v6.0 — Dockerfile Frontend React
 # =============================================================================
 # FIX BUG#2 : Ce fichier était absent — docker compose build échouait
 

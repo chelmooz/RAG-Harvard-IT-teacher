@@ -1,5 +1,5 @@
 """
-Tests d'intégration — Prof IA v5.4
+Tests d'intégration — Prof IA v6.0
 ====================================
 Tests unitaires sans dépendances GPU/DB (mocks).
 Tests d'intégration avec PostgreSQL réel (nécessite docker-compose up postgres).
@@ -11,11 +11,9 @@ Lancer :
 """
 
 import asyncio
-import os
-import sys
 import pytest
 import numpy as np
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 from pathlib import Path
 
 # ── Fixtures ROCm (forcé CPU pour les tests) ────────────────────────────────
@@ -128,9 +126,9 @@ class TestFormatSFT:
 
 
 class TestConfigValidation:
-    """Teste la validation du JWT_SECRET — mode LAN local (v5.4).
+    """Teste la validation du JWT_SECRET — mode LAN local (v6.0).
 
-    En v5.4, le réseau est isolé (LAN BC-250 ↔ PC client).
+    En v6.0, le réseau est isolé (LAN BC-250 ↔ PC client).
     Le JWT sert uniquement à l'auth GitHub datasets.
     Contrainte : non vide. Longueur libre.
     """
@@ -155,7 +153,7 @@ class TestConfigValidation:
                 raise ValueError("vide")
             return v
 
-        # 'user' est le JWT_SECRET v5.4 — doit passer
+        # 'user' est le JWT_SECRET v6.0 — doit passer
         assert validate_jwt("user") == "user"
 
     def test_jwt_long_aussi_accepte(self):

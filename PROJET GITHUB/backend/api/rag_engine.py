@@ -1,7 +1,7 @@
 """
-RAG Engine v5.4 — AMD BC-250 (Cyan Skillfish / RDNA2)
+RAG Engine v6.0 — AMD BC-250 (Cyan Skillfish / RDNA2)
 =======================================================
-CORRECTIFS v5.4 appliqués :
+CORRECTIFS v6.0 appliqués :
   - FIX BUG#2 : f-string SQL supprimé → deux requêtes paramétrées distinctes
   - FIX BUG#3 : pool asyncpg unique — réutilise get_db() de database.py
   - FIX BUG#4 : ON CONFLICT protégé par UNIQUE(file_id, chunk_index) dans database.py
@@ -121,7 +121,7 @@ class EmbeddingEngine:
 
 class RAGEngine:
     """
-    Moteur RAG v5.4 — PostgreSQL + pgvector HNSW.
+    Moteur RAG v6.0 — PostgreSQL + pgvector HNSW.
 
     FIX BUG#3 : RAGEngine réutilise le pool asyncpg de database.py via get_db().
     Plus de double create_pool() → économie de ~80 Mo de connexions sur la GDDR6.
@@ -161,7 +161,7 @@ class RAGEngine:
         Cette séparation des responsabilités garantit un schéma cohérent
         et évite deux définitions divergentes de rag_chunks.
         """
-        logger.info("🔧 Initialisation RAG Engine v5.4...")
+        logger.info("🔧 Initialisation RAG Engine v6.0...")
 
         # Réutiliser le pool global — init_db() a déjà créé les tables
         from .database import get_db
@@ -406,7 +406,7 @@ class RAGEngine:
             "total_chunks":    total,
             "total_documents": files,
             "collection_name": "rag_chunks (pgvector HNSW)",
-            "backend":         "PostgreSQL + pgvector v5.1",
+            "backend":         "PostgreSQL + pgvector v6.0",
         }
 
     async def reset_collection(self):
@@ -442,4 +442,4 @@ class RAGEngine:
         fermé par close_db() au shutdown de l'application FastAPI.
         """
         await self.http_client.aclose()
-        logger.info("✅ RAG Engine v5.4 fermé (pool DB géré par database.py)")
+        logger.info("✅ RAG Engine v6.0 fermé (pool DB géré par database.py)")

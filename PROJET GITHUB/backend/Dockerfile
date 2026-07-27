@@ -1,5 +1,5 @@
 # =============================================================================
-# Prof IA v5.2 — Dockerfile Backend (AMD BC-250 / ROCm 7.2 / Python 3.13)
+# Prof IA v6.0 — Dockerfile Backend (AMD BC-250 / ROCm 7.2 / Python 3.13)
 # =============================================================================
 # FIX BUG#2 : Ce fichier était absent — docker compose build échouait
 #
