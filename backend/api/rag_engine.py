@@ -333,28 +333,11 @@ class RAGEngine:
 
     # ── Génération ─────────────────────────────────────────────────────────────
 
-    async def generate(
-        self,
-        query: str,
-        context: Optional[str] = None,
-        system_prompt: str = "",
-    ) -> str:
-        """
-        Génère une réponse via Ollama avec paramètres BC-250.
-
-        num_ctx=4096  : calibré pour 12 Go VRAM (amdgpu.gttsize=12288).
-        num_thread=6  : utilise les 6 cœurs Zen 2.
-        num_gpu=99    : FIX BUG#5 — charge TOUTES les layers sur GPU.
-                        num_gpu représente le nombre de LAYERS (pas de CUs !).
-                        Qwen3-14B ≈ 40 layers. La convention Ollama:
-                        -1 ou valeur > nb_layers = toutes les layers sur GPU.
-                        99 = forcer tout le modèle sur GPU (compatible -1).
-        f16_kv=True   : KV-cache fp16 → -50 % VRAM.
-        temperature=0.3 : déterministe → réponses courtes = moins de VRAM.
-        stream=False  : évite la fragmentation mémoire sur réponses partielles.
-        """
-        # System prompt verrouillé : empêche la sortie de rôle et l'injection
-        safe_system = (
+    @staticmethod
+    def _build_system_prompt(system_prompt: str) -> str:
+        if system_prompt:
+            return system_prompt
+        return (
             "Tu es un assistant pédagogique spécialisé en cybersécurité et "
             "administration réseau (TSSR, AIS, DevOps). "
             "Réponds en français de manière structurée et pédagogique. "
@@ -363,48 +346,57 @@ class RAGEngine:
             "Si l'information est absente du contexte, réponds : "
             "« Je ne trouve pas cette information dans les documents disponibles. »"
         )
-        if system_prompt:
-            safe_system = system_prompt
 
+    @staticmethod
+    def _build_full_prompt(query: str, context: Optional[str] = None) -> str:
         if context:
-            full_prompt = (
+            return (
                 f"Contexte (sources documentaires) :\n{context}\n\n"
                 f"Question : {query}"
             )
-        else:
-            full_prompt = (
-                f"Question : {query}\n\n"
-                "Aucun document pertinent trouvé dans la base. "
-                "Si tu ne peux pas répondre avec les documents disponibles, "
-                "dis-le clairement sans inventer d'information."
-            )
+        return (
+            f"Question : {query}\n\n"
+            "Aucun document pertinent trouvé dans la base. "
+            "Si tu ne peux pas répondre avec les documents disponibles, "
+            "dis-le clairement sans inventer d'information."
+        )
 
+    async def _call_ollama(self, prompt: str, system: str) -> str:
         try:
             response = await self.http_client.post(
                 f"{self.ollama_host}/api/generate",
                 json={
                     "model":  self.model_name,
-                    "prompt": full_prompt,
-                    "system": safe_system,
+                    "prompt": prompt,
+                    "system": system,
                     "stream": False,
                     "options": {
                         "temperature": 0.3,
                         "top_p":       0.9,
                         "top_k":       40,
                         "num_predict": 1024,
-                        "num_ctx":     4096,   # Calibré pour 12 Go VRAM BC-250
-                        "num_thread":  6,      # = nb cœurs Zen 2
-                        "num_gpu":     99,     # force toutes les 40 layers Qwen3-14B sur GPU (convention Ollama: -1 ou >nb_layers)
-                        "f16_kv":      True,   # KV-cache fp16 → -50 % VRAM
+                        "num_ctx":     4096,
+                        "num_thread":  6,
+                        "num_gpu":     99,
+                        "f16_kv":      True,
                     },
                 },
             )
             response.raise_for_status()
             return response.json().get("response", "Erreur : réponse Ollama vide")
-
         except Exception as e:
             logger.error(f"❌ Erreur génération Ollama : {e}")
             return f"Erreur lors de la génération : {e}"
+
+    async def generate(
+        self,
+        query: str,
+        context: Optional[str] = None,
+        system_prompt: str = "",
+    ) -> str:
+        safe_system = self._build_system_prompt(system_prompt)
+        full_prompt = self._build_full_prompt(query, context)
+        return await self._call_ollama(full_prompt, safe_system)
 
     # ── Stats & Maintenance ────────────────────────────────────────────────────
 

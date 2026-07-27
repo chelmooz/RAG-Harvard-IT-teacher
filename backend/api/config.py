@@ -132,6 +132,16 @@ def get_settings() -> Settings:
     """
     s = Settings()
 
+    _validate_token_source(s)
+    _validate_database_url(s)
+    _validate_api_token(s)
+    _validate_cors(s)
+    _validate_amd_cus(s)
+    _inject_rocm_env(s)
+    return s
+
+
+def _validate_token_source(s: Settings) -> None:
     if not s.API_TOKEN_SOURCE:
         s.API_TOKEN_SOURCE = secrets.token_urlsafe(32)
         logger.warning(
@@ -140,12 +150,16 @@ def get_settings() -> Settings:
             "Ajoutez API_TOKEN_SOURCE=<votre_clé> dans .env pour la persistance."
         )
 
+
+def _validate_database_url(s: Settings) -> None:
     if not s.DATABASE_URL:
         raise ValueError(
             "DATABASE_URL obligatoire dans .env. "
             "Exemple : DATABASE_URL=postgresql://user:password@localhost:5432/prof_ia_v5"
         )
 
+
+def _validate_api_token(s: Settings) -> None:
     if not s.API_TOKEN:
         s.API_TOKEN = s.API_TOKEN_SOURCE
         if not s.API_TOKEN:
@@ -155,12 +169,16 @@ def get_settings() -> Settings:
                 "Ajoutez API_TOKEN=<votre_clé> dans .env pour la persistance."
             )
 
+
+def _validate_cors(s: Settings) -> None:
     if s.CORS_ORIGINS == "*" and not s.DEBUG:
         logger.warning(
             "⚠️  CORS_ORIGINS='*' en mode non DEBUG — restreignez les origines "
             "dans .env (ex: CORS_ORIGINS=http://localhost:3000) en production."
         )
 
+
+def _validate_amd_cus(s: Settings) -> None:
     if s.AMD_RDNA2_CUS not in (24, 40):
         logger.warning(
             f"⚠️  AMD_RDNA2_CUS={s.AMD_RDNA2_CUS} inhabituel (24=stock, 40=débloqué). "
@@ -180,9 +198,10 @@ def get_settings() -> Settings:
             "mettez AMD_RDNA2_CUS=40 dans .env pour que le calcul mémoire en profite."
         )
 
+
+def _inject_rocm_env(s: Settings) -> None:
     os.environ.setdefault("HSA_OVERRIDE_GFX_VERSION", s.HSA_OVERRIDE_GFX_VERSION)
     os.environ.setdefault(
         "PYTORCH_HIP_ALLOC_CONF",
         f"max_split_size_mb:{s.AMD_GTT_SIZE_MB // s.AMD_RDNA2_CUS}"
     )
-    return s

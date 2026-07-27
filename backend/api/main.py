@@ -24,35 +24,18 @@ import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-from dataclasses import dataclass
 
 from fastapi import FastAPI, File, HTTPException, UploadFile, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
-from pydantic import BaseModel
 
 from .config import get_settings
 from .database import init_db, close_db, get_db
 from .rag_engine import RAGEngine
 from .document_processor import DocumentProcessor
+from .schemas import ChatRequest, ChatResponse, HealthResponse, ConversationRecord
 
 settings = get_settings()
-
-# ── Dataclass pour _persist_conversation (SRP) ──────────────────────────────────
-
-@dataclass(slots=True)
-class ConversationRecord:
-    """Regroupe les données de conversation pour _persist_conversation (SRP)."""
-    session_id: str
-    query: str
-    response: str
-    context: Optional[str]
-    chunks: List[Dict[str, Any]]
-    rag_used: bool
-    threshold: float
-    elapsed_ms: int
-    metier: Optional[str]
-    model_name: str = ""
 
 # ── Authentification API ──────────────────────────────────────────────────────
 PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/redoc"}
@@ -150,36 +133,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# MODÈLES PYDANTIC
-# ══════════════════════════════════════════════════════════════════════════════
-
-class ChatRequest(BaseModel):
-    query: str
-    session_id: Optional[str] = None
-    metier: Optional[str] = None          # Filtre : "TSSR" | "AIS" | "DevOps"
-    top_k: Optional[int] = None
-    threshold: Optional[float] = None
-
-
-class ChatResponse(BaseModel):
-    response: str
-    sources: List[dict]
-    session_id: str
-    rag_used: bool
-    chunks_retrieved: int
-    response_time_ms: int
-
-
-class HealthResponse(BaseModel):
-    status: str
-    version: str
-    database: str
-    ollama: str
-    gpu: str
-    embedding_model: str
 
 
 # ══════════════════════════════════════════════════════════════════════════════
