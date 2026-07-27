@@ -145,12 +145,12 @@ class RAGEngine:
     def __init__(
         self,
         db_url: str,
-        ollama_host: str = "http://localhost:11434",
+        ollama_host: str = None,
         model_name: str = "qwen3:14b",
         embedding_model: str = EmbeddingEngine.MODEL_NAME,
     ):
         self.db_url = db_url
-        self.ollama_host = ollama_host
+        self.ollama_host = ollama_host or get_settings().OLLAMA_HOST
         self.model_name = model_name
 
         # FIX BUG#3 : _pool assigné depuis get_db() dans initialize(),

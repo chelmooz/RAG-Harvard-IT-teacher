@@ -1,5 +1,5 @@
-import os
 from pathlib import Path
+import sys
 
 count = 0
 source_dir = Path('frontend/src')
@@ -12,7 +12,7 @@ for f in sorted(source_dir.rglob('*')):
             stripped = line.rstrip()
             if len(stripped) > 120:
                 count += 1
-                print(f"{f}:{i} ({len(stripped)})", file=__import__('sys').stderr)
-    except Exception:
-        pass
-print(f"Total: {count}", file=__import__('sys').stderr)
+                print(f"{f}:{i} ({len(stripped)})", file=sys.stderr)
+    except Exception as e:
+        print(f"Error reading {f}: {e}", file=sys.stderr)
+print(f"Total: {count}", file=sys.stderr)

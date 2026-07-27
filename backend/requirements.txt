@@ -73,7 +73,7 @@ pyyaml==6.0.2            # Requis par fine_tuning/train.py (load_config)
 huggingface-hub==0.25.1
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
-pytest==8.3.4
+pytest==9.1.1
 pytest-asyncio==0.24.0
 # httpx déjà listé — pas de doublon
 

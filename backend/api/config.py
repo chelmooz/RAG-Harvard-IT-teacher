@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = ""
 
     # ── Ollama ───────────────────────────────────────────────────
+    # Défaut : localhost pour dev local ; en Docker, injecté via docker-compose.yml
     OLLAMA_HOST:  str = "http://localhost:11434"
     # Qwen3-14B Q4_K_M (~9,3 Go) — remplace Mistral 7B (2023, obsolète).
     # Laisse ~2,7 Go de marge sur le budget 12 Go (AMD_GTT_SIZE_MB) pour le

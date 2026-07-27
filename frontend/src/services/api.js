@@ -15,11 +15,12 @@ import axios from 'axios';
 // En production, utiliser des variables d'environnement
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8001';
 const API_TOKEN = process.env.REACT_APP_API_TOKEN || 'dev-token';
+const DEFAULT_TIMEOUT_MS = 30000;
 
 // Instance axios configurée
 const api = axios.create({
   baseURL: API_BASE,
-  timeout: 30000,
+  timeout: DEFAULT_TIMEOUT_MS,
   headers: {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${API_TOKEN}`
