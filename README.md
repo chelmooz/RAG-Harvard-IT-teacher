@@ -43,6 +43,7 @@ docker compose build --build-arg USE_ROCM=false backend
 
 1. [Caractéristiques de la Stack v6.0](#1-caractéristiques-de-la-stack-v60)
    - [1.4 Déblocage 40 CU RDNA2 (optionnel)](#14-déblocage-40-cu-rdna2-optionnel)
+   - [1.5 BIOS modifié (prérequis IOMMU / VRAM avancé)](#15-bios-modifié-prérequis-iommu--vram-avancé)
 2. [Paquets Installés et Versions](#2-paquets-installés-et-versions)
 3. [Architecture — PostgreSQL + pgvector HNSW](#3-architecture--postgresql--pgvector-hnsw)
 4. [Formats de Fichiers Supportés](#4-formats-de-fichiers-supportés)
@@ -132,7 +133,55 @@ sur [elektricm.github.io/amd-bc250-docs/system/40cu-unlock](https://elektricm.gi
 ./scripts/unlock-40cu.sh disable  # revient au stock 24 CU
 ```
 
-### 1.5 ROCm (embeddings) vs Vulkan (LLM)
+### 1.5 BIOS modifié (prérequis IOMMU / VRAM avancé)
+
+Le déblocage `IOMMU=Disabled` (§1.3) et les configurations VRAM au-delà des
+3 presets stock (8Go/8Go, 12Go/4Go, 512Mo dynamique) nécessitent le **menu
+Chipset étendu**, absent du BIOS stock. Il faut flasher un BIOS communautaire
+modifié — documentation complète :
+[elektricm.github.io/amd-bc250-docs/bios/flashing](https://elektricm.github.io/amd-bc250-docs/bios/flashing/).
+
+> ⚠️ **Opération à risque de brick.** Une coupure de courant pendant l'écriture
+> peut rendre la carte inutilisable sans programmateur matériel (CH347/Pi
+> Pico) pour la récupérer. Vérifier le hash SHA256 du fichier avant de flasher,
+> et **toujours** clear le CMOS après flash (batterie CR2032 retirée 60s, ou
+> cavalier CMOS) — sans quoi les réglages VRAM ne s'appliquent pas.
+
+**Fichier recommandé (99% des cas)** : `BC250_3.00_CHIPSETMENU.ROM`
+(SHA256 `48fbe5d366e6a56e2fdffdca848426216ba1f083610dab63db89d2f4e6c940b5`,
+sources multiples vérifiées — voir la doc). Ne pas utiliser `P5.00_clv`
+(débloque tout, y compris des réglages de debug dangereux) sauf usage avancé
+assumé.
+
+**Procédure résumée (méthode USB / EFI Shell — recommandée)** :
+1. Clé USB FAT32 ≤32 Go, écran en DisplayPort direct (les adaptateurs HDMI
+   actifs/passifs peuvent donner un écran noir au menu BIOS).
+2. Télécharger l'outil de flash EFI (`4U12G BIOS Update.zip`, contient
+   `AfuEfix64.efi` + `Flash.nsh`) et le ROM modifié ci-dessus.
+3. Copier le contenu de `BIOS EFI` à la racine de la clé, renommer le ROM
+   modifié en `Robin5.00` (sans extension), garder l'ancien `Robin5.00`
+   (BIOS stock) de côté comme sauvegarde.
+4. Débrancher tous les disques/SSD, insérer la clé, démarrer — la carte doit
+   tomber automatiquement dans l'EFI Shell.
+5. Au prompt `Shell>` : `blk0:` (avec l'espace après `:`) puis Entrée,
+   `Flash.nsh` puis Entrée. **Ne pas toucher au clavier ni couper
+   l'alimentation** — en cas de blocage pendant l'écriture, attendre au
+   moins 15 minutes avant toute action.
+6. Une fois le flash terminé, éteindre immédiatement et retirer la clé USB.
+7. **Clear CMOS** (étape critique, cf. avertissement ci-dessus).
+8. Entrer dans le BIOS (touche `Suppr` au démarrage) et configurer :
+   `Chipset → GFX Configuration → Integrated Graphics Controller = Forces`,
+   `UMA Mode = UMA_SPECIFIED`, `UMA Frame Buffer Size = 512Mo`, puis
+   `Advanced → CPU Configuration → IOMMU = Disabled`. `F10` pour sauver.
+
+Récupération en cas de brick : programmateur SPI (WCH CH347 recommandé —
+**pas** de programmateur CH341A à PCB noir, sortie 5V qui peut griller la
+puce 3,3V), cible le chip `BIOS_A1` (16 Mo, **jamais** `SIO1_R` 512 Ko qui
+gère les ventilateurs/capteurs). Détail complet (pinout J4004, commandes
+`flashrom`) dans la doc liée ci-dessus, section *Method 2: Hardware
+Programmer*.
+
+### 1.6 ROCm (embeddings) vs Vulkan (LLM)
 
 Le gfx1013 n'a pas de binaires rocBLAS officiels — ROCm y est expérimental.
 Ce projet utilise donc deux backends GPU différents, par choix :
