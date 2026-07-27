@@ -6,7 +6,9 @@
 
 database:
   # URL PostgreSQL 18.2 (même instance que le backend)
-  url: "postgresql://REDACTED_USER@localhost:5432/prof_ia_v5"
+  # OBLIGATOIRE : définir FINE_TUNING_DB_URL dans l'environnement
+  # Exemple : postgresql://user:${POSTGRES_PASSWORD}@localhost:5432/prof_ia_v5
+  url: "${FINE_TUNING_DB_URL}"
 
 model:
   # Modèle de base à fine-tuner (Mistral 7B en fp16 ≈ 14 Go VRAM)

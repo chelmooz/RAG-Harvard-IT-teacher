@@ -12,6 +12,7 @@ DIFFÉRENCES VS v4 (qui ciblait CUDA) :
 
 import asyncio
 import os
+from os.path import expandvars
 
 # ── Variables ROCm — DOIT être défini AVANT tout import torch/transformers ──────
 # Cyan Skillfish (gfx1013) est absent de la liste officielle ROCm.
@@ -32,7 +33,9 @@ from trl import SFTTrainer
 
 def load_config(path: str = "config.yaml") -> dict:
     with open(path) as f:
-        return yaml.safe_load(f)
+        content = f.read()
+    content = expandvars(content)
+    return yaml.safe_load(content)
 
 
 async def fetch_golden_dataset(db_url: str, limit: int = 500) -> list[dict]:
@@ -128,10 +131,12 @@ def main():
     logger.info("🚀 Prof IA v6.0 — Fine-tuning QLoRA (AMD BC-250 / ROCm 7.2)")
 
     config = load_config()
-    db_url = config.get("database", {}).get(
-        "url",
-        "postgresql://REDACTED_USER@localhost:5432/prof_ia_v5"
-    )
+    db_url = config.get("database", {}).get("url")
+    if not db_url or db_url.startswith("${"):
+        raise ValueError(
+            "FINE_TUNING_DB_URL obligatoire dans l'environnement. "
+            "Exemple : export FINE_TUNING_DB_URL=postgresql://user:password@localhost:5432/prof_ia_v5"
+        )
     base_model = config["model"]["base_model"]
     output_dir = config["training"]["output_dir"]
 

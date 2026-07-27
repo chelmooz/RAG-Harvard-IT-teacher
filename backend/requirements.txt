@@ -23,7 +23,7 @@ pgvector==0.3.4          # Adaptateur Python pour pgvector (numpy + list[float])
 
 # ── LangChain (chunking textuel uniquement — zéro GPU) ────────────────────────
 # REMPLACE wtpsplit (580 Mo de modèle CANINE — inutile sur BC-250)
-langchain-text-splitters==1.3.4
+langchain-text-splitters==1.1.2
 
 # ── Embeddings + PyTorch ROCm ─────────────────────────────────────────────────
 # torch ROCm 7.2 : installer via --index-url (voir ci-dessus)
