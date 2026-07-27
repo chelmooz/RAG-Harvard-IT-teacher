@@ -63,7 +63,7 @@ docker compose build --build-arg USE_ROCM=false backend
 | Architecture CPU | 6 cœurs × Zen 2 @ ~3,0 GHz | asyncio TaskGroup Python 3.13 |
 | Architecture GPU | 24 Compute Units RDNA2 (40 CU débloquables — [voir §1.4](#14-déblocage-40-cu-rdna2-optionnel)) | Batch embeddings, inference Ollama |
 | Mémoire | 16 Go GDDR6 unifiée (partagée CPU+GPU) | Zéro copie PCIe, accès direct |
-| VRAM allouée | 12 Go (amdgpu.gttsize=12288) | LLM + embeddings simultanés |
+| VRAM allouée | 12 Go budget appli (kernel : gttsize=14750+ttm.*, cf. §1.3) | LLM + embeddings simultanés |
 | Stockage principal | SSD NVMe interne | OS, Docker, modèles Ollama |
 | Stockage documents | SSD USB 3.0 externe | Corpus RAG, uploads, backups |
 | Réseau | 1 GbE / Wi-Fi selon config | API REST locale — réseau 192.168.1.x |
@@ -77,9 +77,9 @@ docker compose build --build-arg USE_ROCM=false backend
 | Pilotes GPU | Mesa / RADV Vulkan | 26.0.0 | Rendu + compute ROCm |
 | Framework IA | PyTorch + ROCm | 2.11+ / 7.2 | Calcul GPU natif RDNA2 |
 | Python | CPython | 3.13 | asyncio TaskGroup natif |
-| LLM Runtime | Ollama (image ROCm) | Latest ROCm | Inference Mistral 7B / DeepSeek R1 |
-| Base vectorielle | ChromaDB | 0.4.22 | Collection universelle prof_ia_all |
-| Embeddings | all-MiniLM-L6-v2 | sentence-transformers 3.0.1 | 384 dimensions, stable BC-250 |
+| LLM Runtime | Ollama (image standard, backend Vulkan/RADV) | Latest Vulkan | Inference Qwen3-14B / DeepSeek R1 |
+| Base vectorielle | PostgreSQL + pgvector | 18.2 | Table `rag_chunks`, index HNSW |
+| Embeddings | BAAI/bge-m3 | sentence-transformers 3.0.1 | 1024 dimensions — meilleur choix local pour le FR (MTEB 2026) |
 | API Backend | FastAPI + Uvicorn | 0.115.0 / 0.30.0 | REST API async |
 | Frontend | React | 18.x | Interface utilisateur (5 designs) |
 | Base relationnelle | PostgreSQL | 18.2 | Conversations, ratings, fine-tuning |
@@ -87,7 +87,7 @@ docker compose build --build-arg USE_ROCM=false backend
 
 > **⚠ Changement majeur v5.8.3 vs v5.0** : Nginx **supprimé** de l'architecture. Le frontend est accessible directement sur le port **3000**, le backend sur le port **8000**. Plus simple pour un usage sur réseau local isolé.
 
-> **⚠ Changement majeur v5.8.3 vs v5.0** : pgvector **remplacé par ChromaDB**. Architecture ALL-IN-ONE avec une collection universelle `prof_ia_all` (~33 000 chunks). Le modèle d'embeddings passe de paraphrase-multilingual (768d) à **all-MiniLM-L6-v2 (384d)** — 2× moins de VRAM.
+> **Note** : cette section a un temps décrit une architecture ChromaDB (expérimentation v5.8.3, voir `_archive/`) qui n'a jamais été celle du code actif — le projet utilise PostgreSQL + pgvector depuis v6.0 (`database.py`, table `rag_chunks`), corrigé ci-dessus pour refléter le code réel.
 
 ### 1.3 Variables d'environnement critiques ROCm
 
@@ -98,7 +98,7 @@ Ces variables doivent être définies avant tout import PyTorch sous peine de fa
 | `HSA_OVERRIDE_GFX_VERSION` | `10.1.3` | Force la reconnaissance du Cyan Skillfish (gfx1013) par ROCm |
 | `ROCR_VISIBLE_DEVICES` | `0` | Cible le seul GPU BC-250 |
 | `PYTORCH_HIP_ALLOC_CONF` | `max_split_size_mb:512` | Limite la fragmentation mémoire GDDR6 |
-| `amdgpu.gttsize` | `12288` (GRUB) | Alloue 12 Go de VRAM sur les 16 Go GDDR6 partagés |
+| `amdgpu.gttsize` + `ttm.pages_limit` + `ttm.page_pool_size` | `14750` / `3959290` / `3959290` (GRUB) | Alloue jusqu'à ~14,5-14,75 Go de GTT — les 3 ensemble, gttsize seul ne suffit pas (plafond ttm par défaut atteint avant, crash driver) |
 | `OLLAMA_NUM_PARALLEL` | `1` | Évite la saturation mémoire (1 seule requête LLM à la fois) |
 | `OLLAMA_NUM_GPU` | `99` | Nombre de *layers* du modèle chargées sur GPU (PAS le nombre de CUs — 99 = convention Ollama pour "toutes les layers") |
 | `OLLAMA_KEEP_ALIVE` | `24h` | Maintient le modèle en VRAM 24h sans rechargement |
@@ -132,6 +132,24 @@ sur [elektricm.github.io/amd-bc250-docs/system/40cu-unlock](https://elektricm.gi
 ./scripts/unlock-40cu.sh disable  # revient au stock 24 CU
 ```
 
+### 1.5 ROCm (embeddings) vs Vulkan (LLM)
+
+Le gfx1013 n'a pas de binaires rocBLAS officiels — ROCm y est expérimental.
+Ce projet utilise donc deux backends GPU différents, par choix :
+
+- **Embeddings** (`backend/api/rag_engine.py`, SentenceTransformer/PyTorch) :
+  ROCm si disponible, repli CPU automatique sinon.
+- **LLM** (Ollama, Mistral 7B) : **Vulkan (RADV)** — image `ollama/ollama:latest`
+  (pas `:rocm`). Ollama tente ROCm au démarrage, échoue proprement sur
+  gfx1013, et bascule automatiquement sur Vulkan.
+
+`HSA_OVERRIDE_GFX_VERSION` / `ROCR_VISIBLE_DEVICES` ne sont donc définis que
+pour le service `backend`, plus pour `ollama`. Vérifier le backend réel :
+```bash
+docker compose logs ollama | grep -i "vulkan\|rocm\|gfx1013"
+# attendu : library=Vulkan ... description="AMD BC-250 (RADV GFX1013)"
+```
+
 ---
 
 ## 2. Paquets Installés et Versions
@@ -144,7 +162,7 @@ sur [elektricm.github.io/amd-bc250-docs/system/40cu-unlock](https://elektricm.gi
 | uvicorn[standard] | 0.30.0 | ASGI Server | — |
 | asyncpg | 0.29.0 | PostgreSQL async | Maintenu |
 | **chromadb** | **0.4.22** | **Base vectorielle** | **Remplace pgvector** |
-| sentence-transformers | 3.0.1 | Embeddings GPU | Modèle changé → all-MiniLM-L6-v2 |
+| sentence-transformers | 3.0.1 | Embeddings GPU | Modèle changé → BAAI/bge-m3 (1024d) |
 | transformers | 4.43.0 | HuggingFace | — |
 | torch (ROCm 7.2) | 2.11+ | GPU RDNA2 | — |
 | langchain-text-splitters | 0.2.4 | Chunking | CHUNK_SIZE=400, OVERLAP=80 |
@@ -169,7 +187,7 @@ sur [elektricm.github.io/amd-bc250-docs/system/40cu-unlock](https://elektricm.gi
 | Service | Nom conteneur | Image | Port exposé |
 |---|---|---|---|
 | PostgreSQL | prof-ia-postgres-v58 | postgres:15 | 127.0.0.1:5432 |
-| Ollama (ROCm) | prof-ia-ollama-rocm | ollama/ollama:rocm | 127.0.0.1:11434 |
+| Ollama (Vulkan) | prof-ia-ollama-vulkan | ollama/ollama:latest | 127.0.0.1:11434 |
 | FastAPI Backend | prof-ia-backend-v58 | Build local Python 3.13 | 0.0.0.0:8000 |
 | React Frontend | prof-ia-frontend-v58 | Build local Node 20 | 0.0.0.0:3000 |
 
@@ -179,10 +197,10 @@ sur [elektricm.github.io/amd-bc250-docs/system/40cu-unlock](https://elektricm.gi
 
 | Modèle | VRAM | Vitesse | Usage recommandé |
 |---|---|---|---|
-| mistral:7b-instruct-q4_K_M | ~4.5 Go | Rapide (15-30s) | Usage quotidien, commandes, procédures |
-| deepseek-r1:7b | ~4.7 Go | Lent (30s-6min) | Analyses profondes, rapports, architectures |
+| qwen3:14b | ~9,3 Go | Modéré | Modèle par défaut — meilleure qualité générale et multilingue que Mistral 7B (2023) |
+| deepseek-r1:7b | ~4,7 Go | Lent (30s-6min, raisonnement CoT) | Analyses profondes, rapports, architectures |
 
-> **⚠** Ne jamais charger les deux modèles simultanément. 4,5 + 4,7 = 9,2 Go — faisable techniquement mais dégradation des performances.
+> **⚠** Ne jamais charger les deux modèles simultanément. 9,3 + 4,7 = 14 Go — dépasse le budget 12 Go, planterait le driver.
 
 ---
 
@@ -209,7 +227,7 @@ prof_ia_all (~33 000 chunks)
 | Paramètre | Valeur | Description |
 |---|---|---|
 | `CHROMADB_PATH` | `/app/chromadb_data` | Volume bind mount depuis l'hôte |
-| `EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | 384 dimensions — stable BC-250 |
+| `EMBEDDING_MODEL` | `BAAI/bge-m3` | 1024 dimensions — meilleur choix local pour le FR (MTEB 2026) |
 | `EMBEDDING_BATCH_SIZE` | `32` | AMD BC-250 : 32 safe (64 risque OOM) |
 | `CHUNK_SIZE` | `400` | Mots par chunk |
 | `CHUNK_OVERLAP` | `80` | Chevauchement entre chunks |
@@ -306,7 +324,7 @@ X-Session-Token: <token>
 {
   "message": "Comment configurer un VLAN trunk ?",
   "mode": "précis",        // "précis" | "explore" | "synthèse"
-  "model": "mistral:7b-instruct-q4_K_M"
+  "model": "qwen3:14b"
 }
 ```
 
@@ -440,10 +458,11 @@ docker compose restart backend
 ### 7.3 Administrateur Système — Ce que vous devez savoir
 
 ```bash
-# GRUB — allouer 12 Go de VRAM au GPU
+# GRUB — allouer la VRAM au GPU (gttsize + ttm.* ENSEMBLE, pas gttsize seul)
 # /etc/default/grub :
-GRUB_CMDLINE_LINUX_DEFAULT="quiet amdgpu.gttsize=12288"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet amdgpu.gttsize=14750 ttm.pages_limit=3959290 ttm.page_pool_size=3959290"
 update-grub && reboot
+# NE JAMAIS ajouter amd_iommu=on — IOMMU cassé sur BC-250 (crashs, écran noir)
 
 # Groupes requis pour /dev/kfd et /dev/dri
 usermod -aG video,render user
@@ -502,7 +521,7 @@ Navigateur PC Windows (192.168.1.16)
        │      │
        │      ▼
        │  ┌──────────────────────┐
-       │  │  EmbeddingEngine     │  all-MiniLM-L6-v2 (384d)
+       │  │  EmbeddingEngine     │  BAAI/bge-m3 (1024d)
        │  │  sentence-transformers│  GPU RDNA2 — batch_size=32
        │  └──────────┬───────────┘
        │             │  vecteur 384d
@@ -522,7 +541,7 @@ Navigateur PC Windows (192.168.1.16)
                ▼
 ┌──────────────────────┐
 │  Ollama              │  Mistral 7B Q4_K_M (~4.5 Go VRAM)
-│  prof-ia-ollama-rocm │  ou DeepSeek R1 7B (~4.7 Go VRAM)
+│  prof-ia-ollama-vulkan │  ou DeepSeek R1 7B (~4.7 Go VRAM)
 │  GPU RDNA2 24/40 CU  │  OLLAMA_KEEP_ALIVE=24h — 40 CU si unlock-40cu.sh appliqué
 └──────────────────────┘
                │  réponse texte
