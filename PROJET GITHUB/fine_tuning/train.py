@@ -11,10 +11,7 @@ DIFFÉRENCES VS v4 (qui ciblait CUDA) :
 """
 
 import asyncio
-import json
 import os
-import tempfile
-from pathlib import Path
 
 # ── Variables ROCm — DOIT être défini AVANT tout import torch/transformers ──────
 # Cyan Skillfish (gfx1013) est absent de la liste officielle ROCm.

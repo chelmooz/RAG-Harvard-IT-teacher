@@ -11,32 +11,32 @@
 # =============================================================================
 
 # ── Web Framework ─────────────────────────────────────────────────────────────
-fastapi==0.115.0
-uvicorn[standard]==0.30.0
-python-multipart==0.0.32
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.20
 
 # ── Base de données (PostgreSQL + pgvector) ────────────────────────────────────
 # asyncpg : protocole binaire PostgreSQL — 3-5× plus rapide que SQLAlchemy async
 # REMPLACE : psycopg2-binary + SQLAlchemy + ChromaDB
-asyncpg==0.29.0
-pgvector==0.3.3          # Adaptateur Python pour pgvector (numpy + list[float])
+asyncpg==0.30.0
+pgvector==0.3.4          # Adaptateur Python pour pgvector (numpy + list[float])
 
 # ── LangChain (chunking textuel uniquement — zéro GPU) ────────────────────────
 # REMPLACE wtpsplit (580 Mo de modèle CANINE — inutile sur BC-250)
-langchain-text-splitters==1.1.2
+langchain-text-splitters==1.3.4
 
 # ── Embeddings + PyTorch ROCm ─────────────────────────────────────────────────
 # torch ROCm 7.2 : installer via --index-url (voir ci-dessus)
 # torch==2.11+rocm7.2  ← NE PAS METTRE ICI pour éviter l'install CPU par défaut
-sentence-transformers==3.0.1
-transformers==5.14.1
-accelerate==0.33.0
+sentence-transformers==3.1.1
+transformers==4.44.2
+accelerate==0.34.2
 
 # ── Traitement de documents ───────────────────────────────────────────────────
 # pypdf : successeur officiel de PyPDF2 (même API, mieux maintenu, Python 3.13 ok)
-pypdf==6.14.2
-python-docx==1.1.0
-python-pptx==1.0.0
+pypdf==5.1.1
+python-docx==1.1.2
+python-pptx==1.0.2
 openpyxl==3.1.5
 
 # ── Audio / Transcription ─────────────────────────────────────────────────────
@@ -45,38 +45,38 @@ openai-whisper==20240930
 ffmpeg-python==0.2.0
 
 # ── API / Async ───────────────────────────────────────────────────────────────
-httpx==0.27.0
+httpx==0.28.1
 aiofiles==24.1.0
-python-jose[cryptography]==3.5.0
+python-jose[cryptography]==3.4.0
 passlib[bcrypt]==1.7.4
 
 # ── Config & Validation ───────────────────────────────────────────────────────
-pydantic==2.8.0
-pydantic-settings==2.4.0
-python-dotenv==1.0.1
-python-dateutil==2.9.0
+pydantic==2.10.4
+pydantic-settings==2.5.2
+python-dotenv>=1.2.2
+python-dateutil==2.9.0.post0
 
 # ── Logging & Monitoring ──────────────────────────────────────────────────────
-loguru==0.7.2
-prometheus-client==0.20.0
+loguru==0.7.3
+prometheus-client==0.21.0
 
 # ── ML / Évaluation ───────────────────────────────────────────────────────────
-scikit-learn==1.5.0
-numpy>=2.5.1           # Compatible numpy 2.x (fix CVE désérialisation)
+scikit-learn==1.5.1
+numpy>=2.1.0           # Compatible numpy 2.x (fix CVE désérialisation)
 pandas==2.2.2
 
 # ── Fine-tuning QLoRA (ROCm) ──────────────────────────────────────────────────
-peft==0.12.0
-datasets==2.21.0
-trl==0.10.0              # SFTTrainer — vérifier compatibilité dataset_text_field
+peft==0.14.0
+datasets==2.21.1
+trl==0.11.1              # SFTTrainer — vérifier compatibilité dataset_text_field
 pyyaml==6.0.2            # Requis par fine_tuning/train.py (load_config)
 
 # ── HuggingFace ───────────────────────────────────────────────────────────────
-huggingface-hub==0.24.5
+huggingface-hub==0.25.1
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
-pytest==8.3.0
-pytest-asyncio==0.23.8
+pytest==8.3.4
+pytest-asyncio==0.24.0
 # httpx déjà listé — pas de doublon
 
 # =============================================================================

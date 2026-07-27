@@ -22,19 +22,53 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
+from dataclasses import dataclass
 
 from fastapi import FastAPI, File, HTTPException, UploadFile, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
+from dataclasses import dataclass
 from pydantic import BaseModel
 
 from .config import get_settings
+
+
+@dataclass(slots=True)
+class ConversationRecord:
+    """Regroupe les données de conversation pour _persist_conversation (SRP)."""
+    session_id: str
+    query: str
+    response: str
+    context: Optional[str]
+    chunks: List[dict]
+    rag_used: bool
+    threshold: float
+    elapsed_ms: int
+    metier: Optional[str]
+    model_name: str = ""
 from .database import init_db, close_db, get_db
 from .rag_engine import RAGEngine
 from .document_processor import DocumentProcessor
 
 settings = get_settings()
+
+# ── Dataclass pour _persist_conversation (SRP) ──────────────────────────────────
+
+
+@dataclass
+class ConversationRecord:
+    """Regroupe les données de conversation pour _persist_conversation (SRP)."""
+    session_id: str
+    query: str
+    response: str
+    context: Optional[str]
+    chunks: List[Dict[str, Any]]
+    rag_used: bool
+    threshold: float
+    elapsed_ms: int
+    metier: Optional[str]
+    model_name: str
 
 # ── Authentification API ──────────────────────────────────────────────────────
 PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/redoc"}
@@ -236,12 +270,7 @@ def _build_sources(chunks: List[dict]) -> List[dict]:
     } for c in chunks]
 
 
-async def _persist_conversation(
-    session_id: str, query: str, response: str,
-    context: Optional[str], chunks: List[dict],
-    rag_used: bool, threshold: float, elapsed_ms: int,
-    metier: Optional[str],
-):
+async def _persist_conversation(record: ConversationRecord):
     """Persiste la conversation en base de données."""
     try:
         pool = await get_db()
@@ -255,11 +284,11 @@ async def _persist_conversation(
                     model_name, metier
                 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
                 """,
-                session_id, query, response, context,
+                record.session_id, record.query, record.response, record.context,
                 [{"text": c["text"], "score": c["score"],
-                  "source": c["metadata"].get("source")} for c in chunks],
-                rag_used, len(chunks), threshold, elapsed_ms,
-                settings.OLLAMA_MODEL, metier,
+                  "source": c["metadata"].get("source")} for c in record.chunks],
+                record.rag_used, len(record.chunks), record.threshold, record.elapsed_ms,
+                record.model_name, record.metier,
             )
     except Exception as e:
         logger.warning(f"⚠️  Persistance conversation échouée : {e}")
@@ -294,9 +323,18 @@ async def chat(
     elapsed_ms = int((time.monotonic() - t_start) * 1000)
 
     asyncio.create_task(_persist_conversation(
-        session_id, request.query, response_text,
-        context, chunks, rag_used, threshold, elapsed_ms,
-        request.metier,
+        ConversationRecord(
+            session_id=session_id,
+            query=request.query,
+            response=response_text,
+            context=context,
+            chunks=chunks,
+            rag_used=rag_used,
+            threshold=threshold,
+            elapsed_ms=elapsed_ms,
+            metier=request.metier,
+            model_name=settings.OLLAMA_MODEL,
+        )
     ))
 
     return ChatResponse(
