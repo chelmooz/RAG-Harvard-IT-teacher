@@ -27,7 +27,9 @@ def db_url():
 
 
 @pytest.fixture
-def api_token():
+def base_url():
+    """Base URL for API calls (configurable via env)."""
+    return os.getenv("TEST_API_BASE_URL", "http://localhost:8001")
     """Token API pour les tests E2E."""
     return os.getenv("TEST_API_TOKEN", "test-token")
 
@@ -157,11 +159,9 @@ class TestEndToEnd:
     """Test complet Upload → Index → Query (nécessite docker-compose up)."""
 
     @pytest.mark.asyncio
-    async def test_upload_index_query(self, api_token):
+    async def test_upload_index_query(self, api_token, base_url):
         """Upload d'un fichier texte → indexation → query → chunks_retrieved > 0."""
         import httpx
-
-        BASE_URL = "http://localhost:8001"
 
         content = (
             "Le protocole TCP/IP est la base des communications réseau. "
@@ -174,13 +174,13 @@ class TestEndToEnd:
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             # 1. Health check
-            r = await client.get(f"{BASE_URL}/health")
+            r = await client.get(f"{base_url}/health")
             assert r.status_code == 200, f"Backend non disponible : {r.status_code}"
 
             # 2. Upload
             files = {"file": ("test_integration.txt", content.encode(), "text/plain")}
             r = await client.post(
-                f"{BASE_URL}/documents/upload",
+                f"{base_url}/documents/upload",
                 files=files,
                 data={"metier": "TSSR"},
                 headers=headers,
@@ -191,7 +191,7 @@ class TestEndToEnd:
 
             # 3. Query
             r = await client.post(
-                f"{BASE_URL}/chat",
+                f"{base_url}/chat",
                 json={
                     "query": "Qu'est-ce que TCP/IP ?",
                     "session_id": "test_integration",
