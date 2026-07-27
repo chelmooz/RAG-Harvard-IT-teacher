@@ -34,7 +34,7 @@ accelerate==0.34.2
 
 # ── Traitement de documents ───────────────────────────────────────────────────
 # pypdf : successeur officiel de PyPDF2 (même API, mieux maintenu, Python 3.13 ok)
-pypdf==5.1.1
+pypdf==6.14.2
 python-docx==1.1.2
 python-pptx==1.0.2
 openpyxl==3.1.5
