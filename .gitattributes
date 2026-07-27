@@ -1,0 +1,29 @@
+# Normalise les fins de ligne pour éviter le bruit CRLF/LF sur Windows.
+# Git stocke tout en LF en interne ; la conversion CRLF ne se fait que
+# dans le working directory Windows si nécessaire (via core.autocrlf),
+# mais les scripts shell restent en LF pour rester exécutables sous Linux.
+
+# Détection automatique texte/binaire par défaut
+* text=auto
+
+# Scripts shell : TOUJOURS en LF, même sous Windows — indispensable pour
+# qu'ils s'exécutent correctement sur la machine Linux (BC-250).
+*.sh text eol=lf
+
+# Fichiers Python, config, doc : LF partout (cohérence multi-plateforme)
+*.py  text eol=lf
+*.md  text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.env text eol=lf
+.env.example text eol=lf
+
+# Fichiers binaires : ne jamais toucher
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.zip  binary
