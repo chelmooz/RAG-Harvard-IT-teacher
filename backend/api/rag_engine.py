@@ -344,11 +344,11 @@ class RAGEngine:
 
         num_ctx=4096  : calibré pour 12 Go VRAM (amdgpu.gttsize=12288).
         num_thread=6  : utilise les 6 cœurs Zen 2.
-        num_gpu=-1    : FIX BUG#5 — charge TOUTES les layers sur GPU.
+        num_gpu=99    : FIX BUG#5 — charge TOUTES les layers sur GPU.
                         num_gpu représente le nombre de LAYERS (pas de CUs !).
-                        Mistral 7B Q4_K_M ≈ 32 layers. Mettre 24 ne chargeait
-                        que 75 % du modèle sur GPU, le reste en RAM CPU.
-                        -1 = comportement optimal recommandé par Ollama.
+                        Qwen3-14B ≈ 40 layers. La convention Ollama:
+                        -1 ou valeur > nb_layers = toutes les layers sur GPU.
+                        99 = forcer tout le modèle sur GPU (compatible -1).
         f16_kv=True   : KV-cache fp16 → -50 % VRAM.
         temperature=0.3 : déterministe → réponses courtes = moins de VRAM.
         stream=False  : évite la fragmentation mémoire sur réponses partielles.
@@ -394,7 +394,7 @@ class RAGEngine:
                         "num_predict": 1024,
                         "num_ctx":     4096,   # Calibré pour 12 Go VRAM BC-250
                         "num_thread":  6,      # = nb cœurs Zen 2
-                        "num_gpu":     99,     # force toutes les 32 layers Mistral 7B sur GPU (convention Ollama)
+                        "num_gpu":     99,     # force toutes les 40 layers Qwen3-14B sur GPU (convention Ollama: -1 ou >nb_layers)
                         "f16_kv":      True,   # KV-cache fp16 → -50 % VRAM
                     },
                 },

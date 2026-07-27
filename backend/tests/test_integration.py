@@ -12,7 +12,7 @@ import pytest
 import pytest_asyncio
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════════════
 # TESTS D'INTÉGRATION — Nécessite PostgreSQL (docker-compose up postgres)
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -24,6 +24,12 @@ def db_url():
         "TEST_DATABASE_URL",
         "postgresql://REDACTED_USER@localhost:5432/prof_ia_v5"
     )
+
+
+@pytest.fixture
+def api_token():
+    """Token API pour les tests E2E."""
+    return os.getenv("TEST_API_TOKEN", "test-token")
 
 
 @pytest_asyncio.fixture
@@ -86,7 +92,7 @@ class TestDatabaseIntegration:
         """ON CONFLICT DO NOTHING doit dédoublonner les réindexations."""
         async with pool.acquire() as conn:
             # Insérer un chunk de test
-            fake_vec = [0.0] * 768
+            fake_vec = [0.0] * 1024
             fake_vec[0] = 1.0  # Vecteur non-nul
 
             await conn.execute("""
@@ -151,7 +157,7 @@ class TestEndToEnd:
     """Test complet Upload → Index → Query (nécessite docker-compose up)."""
 
     @pytest.mark.asyncio
-    async def test_upload_index_query(self):
+    async def test_upload_index_query(self, api_token):
         """Upload d'un fichier texte → indexation → query → chunks_retrieved > 0."""
         import httpx
 
@@ -164,6 +170,8 @@ class TestEndToEnd:
             "TSSR signifie Technicien Supérieur Systèmes et Réseaux."
         )
 
+        headers = {"Authorization": f"Bearer {api_token}"}
+
         async with httpx.AsyncClient(timeout=60.0) as client:
             # 1. Health check
             r = await client.get(f"{BASE_URL}/health")
@@ -175,6 +183,7 @@ class TestEndToEnd:
                 f"{BASE_URL}/documents/upload",
                 files=files,
                 data={"metier": "TSSR"},
+                headers=headers,
             )
             assert r.status_code == 200, f"Upload échoué : {r.text}"
             file_id = r.json().get("file_id")
@@ -186,8 +195,9 @@ class TestEndToEnd:
                 json={
                     "query": "Qu'est-ce que TCP/IP ?",
                     "session_id": "test_integration",
-                    "metier_filter": "TSSR",
+                    "metier": "TSSR",
                 },
+                headers=headers,
             )
             assert r.status_code == 200, f"Chat échoué : {r.text}"
             data = r.json()
@@ -196,4 +206,4 @@ class TestEndToEnd:
 
             # 4. Cleanup
             if file_id:
-                await client.delete(f"{BASE_URL}/documents/{file_id}")
+                await client.delete(f"{BASE_URL}/documents/{file_id}", headers=headers)

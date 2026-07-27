@@ -17,6 +17,7 @@ CORRECTIFS v6.0 CONSERVÉS :
   - FIX BUG#3 : nginx.conf créé
   - FIX BUG#4 : register_vector() dans database.py
   - FIX BUG#5 : num_gpu=-1 dans rag_engine.py
+  - FIX BUG#6 : JWT_SECRET renommé API_TOKEN_SOURCE (pas de JWT émis)
 """
 
 import os
@@ -90,14 +91,17 @@ class Settings(BaseSettings):
     AUTO_EVALUATE:    bool  = True
     GOLDEN_THRESHOLD: float = 0.85
 
-    # ── Sécurité ─────────────────────────────────────────────────
-    # CLÉ OBLIGATOIRE en production : définir JWT_SECRET dans .env
+# ── Sécurité ─────────────────────────────────────────────────
+    # Clé source pour générer API_TOKEN si non défini explicitement.
+    # NOM IMPORTANT : bien que nommée JWT_SECRET, elle n'est PAS utilisée
+    # pour signer/vérifier des JWT (aucun JWT n'est émis). Elle sert
+    # uniquement de fallback aléatoire pour API_TOKEN (Bearer token statique).
     # Génération : python -c "import secrets; print(secrets.token_urlsafe(32))"
-    # Par défaut : aléatoire (changé à chaque redémarrage si .env absent).
-    JWT_SECRET:   str = ""
-    # Token API pour authentifier les requêtes frontend
+    # Par défaut : aléatoire (changée à chaque redémarrage si .env absent).
+    API_TOKEN_SOURCE:   str = ""
+    # Token API pour authentifier les requêtes frontend (Bearer token statique)
     # Doit être identique côté client (REACT_APP_API_TOKEN)
-    # Par défaut : identique à JWT_SECRET si non défini séparément
+    # Par défaut : identique à API_TOKEN_SOURCE si non défini séparément
     API_TOKEN:    str = ""
     # Toutes origines autorisées — usage LAN uniquement
     CORS_ORIGINS: str = "*"
@@ -128,12 +132,12 @@ def get_settings() -> Settings:
     """
     s = Settings()
 
-    if not s.JWT_SECRET:
-        s.JWT_SECRET = secrets.token_urlsafe(32)
+    if not s.API_TOKEN_SOURCE:
+        s.API_TOKEN_SOURCE = secrets.token_urlsafe(32)
         logger.warning(
-            "⚠️  JWT_SECRET non défini dans .env — clé aléatoire générée. "
+            "⚠️  API_TOKEN_SOURCE non défini dans .env — clé aléatoire générée. "
             "Les sessions seront invalidées au redémarrage. "
-            "Ajoutez JWT_SECRET=<votre_clé> dans .env pour la persistance."
+            "Ajoutez API_TOKEN_SOURCE=<votre_clé> dans .env pour la persistance."
         )
 
     if not s.DATABASE_URL:
@@ -143,7 +147,7 @@ def get_settings() -> Settings:
         )
 
     if not s.API_TOKEN:
-        s.API_TOKEN = s.JWT_SECRET
+        s.API_TOKEN = s.API_TOKEN_SOURCE
         if not s.API_TOKEN:
             s.API_TOKEN = secrets.token_urlsafe(32)
             logger.warning(

@@ -11,7 +11,8 @@
   - `backend/api/document_processor.py` (355 lignes)
   - `backend/api/__init__.py` (1 ligne)
   - `backend/requirements.txt` (96 lignes)
-  - `backend/tests/test_rag_engine.py` (530 lignes)
+  - `backend/tests/test_unit.py` (80 lignes)
+  - `backend/tests/test_integration.py` (199 lignes)
   - `frontend/src/pages/Dashboard.js` (193 lignes)
   - `frontend/src/pages/DesignPicker.js` (55 lignes)
   - `frontend/src/pages/Landing.js` (44 lignes)
@@ -94,7 +95,7 @@
 ## Phase 5 — Architecture, code, tests (grille audit)
 - **Point 1 — Découpage modulaire** : 6 fichiers dans `backend/api/` — `config.py` (config), `database.py` (pool DB), `document_processor.py` (ingestion), `rag_engine.py` (RAG), `main.py` (routes), `__init__.py` (package). Responsabilités bien séparées. Statut : ✅
 - **Point 2 — Gestion des exceptions** : 8 `except`/`raise HTTPException` dans `main.py`, 3 dans `rag_engine.py`, 5+ dans `document_processor.py`. Chaque appel externe (Ollama, PostgreSQL, fichiers) est protégé. Statut : ✅
-- **Point 3 — Tests unitaires** : `backend/tests/test_rag_engine.py` (530 lignes). CI exécute `pytest tests/ -v -m "not integration" --timeout=30`. 2 fichiers de test. Statut : ✅
+- **Point 3 — Tests unitaires** : `backend/tests/test_unit.py` (80 lignes) + `backend/tests/test_integration.py` (199 lignes). CI exécute `pytest tests/ -v -m "not integration" --timeout=30`. 2 fichiers de test. Statut : ✅
 - **Point 4 — CI GitHub Actions** : workflow complet (lint-backend ruff, test-backend pytest, lint-frontend eslint, test-frontend react-scripts, test-integration PostgreSQL, docker-build). 5 jobs. Statut : ✅
 - **Score axe Architecture** : 4/4 ✅
 

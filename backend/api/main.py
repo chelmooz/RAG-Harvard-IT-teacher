@@ -20,6 +20,7 @@ Architecture des endpoints :
 import asyncio
 import time
 import uuid
+import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List, Optional, Dict, Any
@@ -28,25 +29,9 @@ from dataclasses import dataclass
 from fastapi import FastAPI, File, HTTPException, UploadFile, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
-from dataclasses import dataclass
 from pydantic import BaseModel
 
 from .config import get_settings
-
-
-@dataclass(slots=True)
-class ConversationRecord:
-    """Regroupe les données de conversation pour _persist_conversation (SRP)."""
-    session_id: str
-    query: str
-    response: str
-    context: Optional[str]
-    chunks: List[dict]
-    rag_used: bool
-    threshold: float
-    elapsed_ms: int
-    metier: Optional[str]
-    model_name: str = ""
 from .database import init_db, close_db, get_db
 from .rag_engine import RAGEngine
 from .document_processor import DocumentProcessor
@@ -55,8 +40,7 @@ settings = get_settings()
 
 # ── Dataclass pour _persist_conversation (SRP) ──────────────────────────────────
 
-
-@dataclass
+@dataclass(slots=True)
 class ConversationRecord:
     """Regroupe les données de conversation pour _persist_conversation (SRP)."""
     session_id: str
@@ -68,7 +52,7 @@ class ConversationRecord:
     threshold: float
     elapsed_ms: int
     metier: Optional[str]
-    model_name: str
+    model_name: str = ""
 
 # ── Authentification API ──────────────────────────────────────────────────────
 PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/redoc"}
@@ -80,7 +64,8 @@ async def verify_api_token(request: Request):
     if request.url.path in PUBLIC_PATHS:
         return True
     auth = request.headers.get("Authorization", "")
-    if auth == f"Bearer {settings.API_TOKEN}":
+    expected = f"Bearer {settings.API_TOKEN}"
+    if secrets.compare_digest(auth, expected):
         return True
     raise HTTPException(
         status_code=401,
