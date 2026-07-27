@@ -80,9 +80,9 @@ services:
       dockerfile: Dockerfile
       args:
         PYTHON_VERSION: "3.13"
+        USE_ROCM: "true"
     container_name: prof-ia-backend-v5.4
     restart: unless-stopped
-    user: root
     devices:
       - /dev/kfd:/dev/kfd
       - /dev/dri:/dev/dri
@@ -140,7 +140,6 @@ services:
       dockerfile: Dockerfile
     container_name: prof-ia-frontend-v5.4
     restart: unless-stopped
-    user: root
     environment:
       - REACT_APP_API_URL=http://localhost:8001
       - REACT_APP_VERSION=5.4.0
@@ -160,7 +159,6 @@ services:
     image: nginx:alpine
     container_name: prof-ia-nginx-v5.4
     restart: unless-stopped
-    user: root
     ports:
       - "0.0.0.0:8080:80"
     volumes:

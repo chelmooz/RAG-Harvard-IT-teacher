@@ -341,19 +341,30 @@ class RAGEngine:
         temperature=0.3 : déterministe → réponses courtes = moins de VRAM.
         stream=False  : évite la fragmentation mémoire sur réponses partielles.
         """
+        # System prompt verrouillé : empêche la sortie de rôle et l'injection
+        safe_system = (
+            "Tu es un assistant pédagogique spécialisé en cybersécurité et "
+            "administration réseau (TSSR, AIS, DevOps). "
+            "Réponds en français de manière structurée et pédagogique. "
+            "Cite toujours tes sources entre parenthèses, exemple : (Source : nom_du_document). "
+            "Utilise les sources fournies dans le contexte pour justifier tes réponses. "
+            "Si l'information est absente du contexte, réponds : "
+            "« Je ne trouve pas cette information dans les documents disponibles. »"
+        )
+        if system_prompt:
+            safe_system = system_prompt
+
         if context:
             full_prompt = (
                 f"Contexte (sources documentaires) :\n{context}\n\n"
-                f"Question : {query}\n\n"
-                "Réponds en français en te basant EXCLUSIVEMENT sur le contexte. "
-                "Cite toujours tes sources (« Selon [Source]... »). "
-                "Si l'information est absente du contexte, dis-le clairement."
+                f"Question : {query}"
             )
         else:
             full_prompt = (
                 f"Question : {query}\n\n"
                 "Aucun document pertinent trouvé dans la base. "
-                "Reformule ou précise ta demande."
+                "Si tu ne peux pas répondre avec les documents disponibles, "
+                "dis-le clairement sans inventer d'information."
             )
 
         try:
@@ -362,7 +373,7 @@ class RAGEngine:
                 json={
                     "model":  self.model_name,
                     "prompt": full_prompt,
-                    "system": system_prompt,
+                    "system": safe_system,
                     "stream": False,
                     "options": {
                         "temperature": 0.3,

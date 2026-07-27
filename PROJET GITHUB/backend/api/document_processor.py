@@ -314,7 +314,14 @@ class DocumentProcessor:
 
         try/except dans _process_one : un fichier défaillant n'annule pas tout.
         """
-        dir_path = Path(directory)
+        dir_path = Path(directory).resolve(strict=False)
+        # Whitelist : seuls les sous-répertoires de upload_dir sont autorisés
+        allowed = self.upload_dir.resolve()
+        if not str(dir_path).startswith(str(allowed)):
+            raise ValueError(
+                f"Chemin refusé : {dir_path} — seuls les sous-répertoires de "
+                f"{allowed} sont autorisés"
+            )
         if not dir_path.exists():
             raise ValueError(f"Répertoire inexistant : {directory}")
 

@@ -13,6 +13,7 @@
 # =============================================================================
 
 ARG PYTHON_VERSION=3.13
+ARG USE_ROCM=false
 FROM python:${PYTHON_VERSION}-slim AS base
 
 # ── Dépendances système ───────────────────────────────────────────────────────
@@ -30,13 +31,14 @@ WORKDIR /app
 # Copie séparée pour profiter du cache Docker (ne rebuild que si requirements changent)
 COPY requirements.txt .
 
-# PyTorch ROCm 7.2 — décommenter pour une machine BC-250 avec ROCm installé :
-# RUN pip install --no-cache-dir torch torchvision torchaudio \
-#     --index-url https://download.pytorch.org/whl/rocm7.2
-
-# PyTorch CPU (CI/dev sans GPU ROCm) :
-RUN pip install --no-cache-dir torch torchvision torchaudio \
-    --index-url https://download.pytorch.org/whl/cpu
+# PyTorch — sélection ROCm ou CPU via --build-arg USE_ROCM=true
+RUN if [ "$USE_ROCM" = "true" ]; then \
+        pip install --no-cache-dir torch torchvision torchaudio \
+            --index-url https://download.pytorch.org/whl/rocm7.2; \
+    else \
+        pip install --no-cache-dir torch torchvision torchaudio \
+            --index-url https://download.pytorch.org/whl/cpu; \
+    fi
 
 # Reste des dépendances Prof IA
 RUN pip install --no-cache-dir -r requirements.txt

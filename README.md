@@ -1,18 +1,45 @@
-# Prof IA v5.8.3 ALL-IN-ONE
-## Documentation Technique Complète
+# Prof IA v5.4 — RAG Engine (pgvector)
+## Documentation Technique
 
 **AMD BC-250 · Cyan Skillfish (RDNA2) · ROCm 7.2**  
 *À destination des Web Designers · DevOps · Administrateurs Système · Étudiants TSSR / AIS / DevOps*
+
+> **Baseline active : v5.4 (PROJET GITHUB/)** — Backend vectoriel PostgreSQL + pgvector.  
+> Versions antérieures archivées dans `_archive/` (v5.5, v5.8.3 ChromaDB).
+
+---
+
+## Déploiement rapide
+
+```bash
+# 1. Prérequis : Docker Compose, GPU AMD BC-250 avec ROCm
+# 2. Clé secrète (optionnel mais recommandé en prod)
+echo "JWT_SECRET=votre_clé_secrète" > .env
+
+# 3. Lancer la stack complète
+docker compose up -d
+
+# 4. Vérifier l'état
+curl http://localhost:8001/health
+
+# 5. Build avec GPU ROCm (défaut) ou CPU uniquement
+docker compose build --build-arg USE_ROCM=false backend
+```
+
+**Accès :**
+- Frontend : http://localhost:3000
+- API Backend : http://localhost:8001
+- Proxy Nginx : http://localhost:8080
 
 ---
 
 ## Table des matières
 
-1. [Caractéristiques de la Stack v5.8.3](#1-caractéristiques-de-la-stack-v583)
+1. [Caractéristiques de la Stack v5.4](#1-caractéristiques-de-la-stack-v54)
 2. [Paquets Installés et Versions](#2-paquets-installés-et-versions)
-3. [Architecture ALL-IN-ONE — ChromaDB](#3-architecture-all-in-one--chromadb)
+3. [Architecture — PostgreSQL + pgvector HNSW](#3-architecture--postgresql--pgvector-hnsw)
 4. [Formats de Fichiers Supportés](#4-formats-de-fichiers-supportés)
-5. [RAG — Les 3 Modes de Requête](#5-rag--les-3-modes-de-requête)
+5. [RAG — Modes de Requête](#5-rag--modes-de-requête)
 6. [Datasets & Fine-Tuning LoRA](#6-datasets--fine-tuning-lora)
 7. [Guide par Profil Utilisateur](#7-guide-par-profil-utilisateur)
 8. [Architecture Globale — Vue d'ensemble](#8-architecture-globale--vue-densemble)

@@ -20,8 +20,10 @@ CORRECTIFS v5.4 CONSERVÉS :
 """
 
 import os
+import secrets
 from functools import lru_cache
 from pydantic_settings import BaseSettings
+from loguru import logger
 
 
 class Settings(BaseSettings):
@@ -33,9 +35,9 @@ class Settings(BaseSettings):
 
     # ── PostgreSQL (unique backend : conversations + vecteurs) ──
     # pgvector remplace ChromaDB — un seul moteur, latence ~1-3 ms
-    DATABASE_URL: str = (
-        "postgresql://REDACTED_USER@localhost:5432/prof_ia_v5"
-    )
+    # OBLIGATOIRE : définir DATABASE_URL dans .env
+    # Exemple : postgresql://user:password@localhost:5432/prof_ia_v5
+    DATABASE_URL: str = ""
 
     # ── Ollama ───────────────────────────────────────────────────
     OLLAMA_HOST:  str = "http://localhost:11434"
@@ -66,10 +68,14 @@ class Settings(BaseSettings):
     GOLDEN_THRESHOLD: float = 0.85
 
     # ── Sécurité ─────────────────────────────────────────────────
-    # v5.3 : réseau local isolé (LAN derrière pare-feu, hors WAN).
-    # JWT utilisé comme token d'auth pour récupérer des datasets GitHub.
-    # Pas de contrainte de format — valeur par défaut fonctionnelle.
-    JWT_SECRET:   str = "user"
+    # CLÉ OBLIGATOIRE en production : définir JWT_SECRET dans .env
+    # Génération : python -c "import secrets; print(secrets.token_urlsafe(32))"
+    # Par défaut : aléatoire (changé à chaque redémarrage si .env absent).
+    JWT_SECRET:   str = ""
+    # Token API pour authentifier les requêtes frontend
+    # Doit être identique côté client (REACT_APP_API_TOKEN)
+    # Par défaut : identique à JWT_SECRET si non défini séparément
+    API_TOKEN:    str = ""
     # Toutes origines autorisées — usage LAN uniquement
     CORS_ORIGINS: str = "*"
 
@@ -98,6 +104,36 @@ def get_settings() -> Settings:
     — correct en production, à désactiver dans les tests unitaires si nécessaire.
     """
     s = Settings()
+
+    if not s.JWT_SECRET:
+        s.JWT_SECRET = secrets.token_urlsafe(32)
+        logger.warning(
+            "⚠️  JWT_SECRET non défini dans .env — clé aléatoire générée. "
+            "Les sessions seront invalidées au redémarrage. "
+            "Ajoutez JWT_SECRET=<votre_clé> dans .env pour la persistance."
+        )
+
+    if not s.DATABASE_URL:
+        raise ValueError(
+            "DATABASE_URL obligatoire dans .env. "
+            "Exemple : DATABASE_URL=postgresql://user:password@localhost:5432/prof_ia_v5"
+        )
+
+    if not s.API_TOKEN:
+        s.API_TOKEN = s.JWT_SECRET
+        if not s.API_TOKEN:
+            s.API_TOKEN = secrets.token_urlsafe(32)
+            logger.warning(
+                "⚠️  API_TOKEN non défini dans .env — clé aléatoire générée. "
+                "Ajoutez API_TOKEN=<votre_clé> dans .env pour la persistance."
+            )
+
+    if s.CORS_ORIGINS == "*" and not s.DEBUG:
+        logger.warning(
+            "⚠️  CORS_ORIGINS='*' en mode non DEBUG — restreignez les origines "
+            "dans .env (ex: CORS_ORIGINS=http://localhost:3000) en production."
+        )
+
     os.environ.setdefault("HSA_OVERRIDE_GFX_VERSION", s.HSA_OVERRIDE_GFX_VERSION)
     os.environ.setdefault(
         "PYTORCH_HIP_ALLOC_CONF",

@@ -17,13 +17,14 @@ Architecture des endpoints :
   GET  /chat/history        — historique des conversations
 """
 
+import asyncio
 import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import FastAPI, File, HTTPException, UploadFile, Depends
+from fastapi import FastAPI, File, HTTPException, UploadFile, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 from pydantic import BaseModel
@@ -34,6 +35,24 @@ from .rag_engine import RAGEngine
 from .document_processor import DocumentProcessor
 
 settings = get_settings()
+
+# ── Authentification API ──────────────────────────────────────────────────────
+PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/redoc"}
+
+
+async def verify_api_token(request: Request):
+    """Vérifie le token API dans le header Authorization.
+    Les endpoints publics sont exemptés. Le token est comparé à settings.API_TOKEN."""
+    if request.url.path in PUBLIC_PATHS:
+        return True
+    auth = request.headers.get("Authorization", "")
+    if auth == f"Bearer {settings.API_TOKEN}":
+        return True
+    raise HTTPException(
+        status_code=401,
+        detail="Token API invalide ou manquant. Ajoutez Authorization: Bearer <token>"
+    )
+
 
 # ── Instances globales ─────────────────────────────────────────────────────────
 _rag_engine: Optional[RAGEngine] = None
@@ -89,6 +108,8 @@ async def lifespan(app: FastAPI):
     logger.info("🔴 Arrêt de Prof IA v5.4...")
     if _rag_engine:
         await _rag_engine.close()
+    if _doc_processor:
+        _doc_processor.unload_whisper()
     await close_db()
     logger.info("✅ Arrêt propre effectué")
 
@@ -122,7 +143,6 @@ class ChatRequest(BaseModel):
     metier: Optional[str] = None          # Filtre : "TSSR" | "AIS" | "DevOps"
     top_k: Optional[int] = None
     threshold: Optional[float] = None
-    system_prompt: Optional[str] = ""
 
 
 class ChatResponse(BaseModel):
@@ -148,7 +168,10 @@ class HealthResponse(BaseModel):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.get("/health", response_model=HealthResponse, tags=["Monitoring"])
-async def health_check(rag: RAGEngine = Depends(get_rag_engine)):
+async def health_check(
+    rag: RAGEngine = Depends(get_rag_engine),
+    _=Depends(verify_api_token),
+):
     """
     Vérifie l'état de tous les composants :
     PostgreSQL + pgvector, Ollama ROCm, GPU AMD BC-250.
@@ -192,52 +215,34 @@ async def health_check(rag: RAGEngine = Depends(get_rag_engine)):
 # CHAT / RAG
 # ══════════════════════════════════════════════════════════════════════════════
 
-@app.post("/chat", response_model=ChatResponse, tags=["Chat"])
-async def chat(
-    request: ChatRequest,
-    rag: RAGEngine = Depends(get_rag_engine),
+def _build_context(chunks: List[dict]) -> tuple[bool, Optional[str]]:
+    """Construit le contexte RAG à partir des chunks récupérés."""
+    if not chunks:
+        return False, None
+    parts = []
+    for i, c in enumerate(chunks, 1):
+        src = c["metadata"].get("source", "inconnu")
+        parts.append(f"[Source {i} — {src}]\n{c['text']}")
+    return True, "\n\n---\n\n".join(parts)
+
+
+def _build_sources(chunks: List[dict]) -> List[dict]:
+    """Prépare la liste des sources pour la réponse."""
+    return [{
+        "rank": c["rank"],
+        "text": c["text"][:200] + "..." if len(c["text"]) > 200 else c["text"],
+        "score": round(c["score"], 4),
+        "source": c["metadata"].get("source", "inconnu"),
+    } for c in chunks]
+
+
+async def _persist_conversation(
+    session_id: str, query: str, response: str,
+    context: Optional[str], chunks: List[dict],
+    rag_used: bool, threshold: float, elapsed_ms: int,
+    metier: Optional[str],
 ):
-    """
-    Pipeline RAG complet :
-    1. Embeddings de la query sur GPU RDNA2
-    2. Recherche HNSW dans pgvector
-    3. Génération Ollama avec contexte
-    4. Persistance de la conversation en DB
-    """
-    t_start = time.monotonic()
-
-    session_id = request.session_id or str(uuid.uuid4())
-    top_k = request.top_k or settings.RAG_TOP_K
-    threshold = request.threshold or settings.RAG_THRESHOLD
-
-    # Retrieval
-    chunks = await rag.retrieve(
-        query=request.query,
-        top_k=top_k,
-        threshold=threshold,
-        metier_filter=request.metier,
-    )
-
-    # Construction du contexte
-    rag_used = len(chunks) > 0
-    context = None
-    if rag_used:
-        parts = []
-        for i, c in enumerate(chunks, 1):
-            src = c["metadata"].get("source", "inconnu")
-            parts.append(f"[Source {i} — {src}]\n{c['text']}")
-        context = "\n\n---\n\n".join(parts)
-
-    # Génération
-    response_text = await rag.generate(
-        query=request.query,
-        context=context,
-        system_prompt=request.system_prompt or "",
-    )
-
-    elapsed_ms = int((time.monotonic() - t_start) * 1000)
-
-    # Persistance conversation
+    """Persiste la conversation en base de données."""
     try:
         pool = await get_db()
         async with pool.acquire() as conn:
@@ -250,30 +255,53 @@ async def chat(
                     model_name, metier
                 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
                 """,
-                session_id,
-                request.query,
-                response_text,
-                context,
+                session_id, query, response, context,
                 [{"text": c["text"], "score": c["score"],
                   "source": c["metadata"].get("source")} for c in chunks],
-                rag_used,
-                len(chunks),
-                threshold,
-                elapsed_ms,
-                settings.OLLAMA_MODEL,
-                request.metier,
+                rag_used, len(chunks), threshold, elapsed_ms,
+                settings.OLLAMA_MODEL, metier,
             )
     except Exception as e:
         logger.warning(f"⚠️  Persistance conversation échouée : {e}")
 
+
+@app.post("/chat", response_model=ChatResponse, tags=["Chat"])
+async def chat(
+    request: ChatRequest,
+    rag: RAGEngine = Depends(get_rag_engine),
+    _=Depends(verify_api_token),
+):
+    """
+    Pipeline RAG complet :
+    1. Embeddings de la query sur GPU RDNA2
+    2. Recherche HNSW dans pgvector
+    3. Génération Ollama avec contexte
+    4. Persistance de la conversation en DB
+    """
+    t_start = time.monotonic()
+    session_id = request.session_id or str(uuid.uuid4())
+    top_k = request.top_k or settings.RAG_TOP_K
+    threshold = request.threshold or settings.RAG_THRESHOLD
+
+    chunks = await rag.retrieve(
+        query=request.query, top_k=top_k,
+        threshold=threshold, metier_filter=request.metier,
+    )
+    rag_used, context = _build_context(chunks)
+    response_text = await rag.generate(
+        query=request.query, context=context,
+    )
+    elapsed_ms = int((time.monotonic() - t_start) * 1000)
+
+    asyncio.create_task(_persist_conversation(
+        session_id, request.query, response_text,
+        context, chunks, rag_used, threshold, elapsed_ms,
+        request.metier,
+    ))
+
     return ChatResponse(
         response=response_text,
-        sources=[{
-            "rank": c["rank"],
-            "text": c["text"][:200] + "..." if len(c["text"]) > 200 else c["text"],
-            "score": round(c["score"], 4),
-            "source": c["metadata"].get("source", "inconnu"),
-        } for c in chunks],
+        sources=_build_sources(chunks),
         session_id=session_id,
         rag_used=rag_used,
         chunks_retrieved=len(chunks),
@@ -286,6 +314,7 @@ async def get_history(
     session_id: Optional[str] = None,
     metier: Optional[str] = None,
     limit: int = 20,
+    _=Depends(verify_api_token),
 ):
     """Récupère l'historique des conversations."""
     pool = await get_db()
@@ -329,6 +358,7 @@ async def upload_document(
     metier: Optional[str] = None,
     rag: RAGEngine = Depends(get_rag_engine),
     proc: DocumentProcessor = Depends(get_doc_processor),
+    _=Depends(verify_api_token),
 ):
     """
     Upload, extraction et indexation d'un document.
@@ -371,7 +401,9 @@ async def upload_document(
 
 
 @app.get("/documents/list", tags=["Documents"])
-async def list_documents():
+async def list_documents(
+    _=Depends(verify_api_token),
+):
     """Liste tous les documents indexés avec leur nombre de chunks."""
     pool = await get_db()
     async with pool.acquire() as conn:
@@ -388,7 +420,10 @@ async def list_documents():
 
 
 @app.delete("/documents/{file_id}", tags=["Documents"])
-async def delete_document(file_id: str):
+async def delete_document(
+    file_id: str,
+    _=Depends(verify_api_token),
+):
     """Supprime un document et tous ses chunks de la base vectorielle."""
     pool = await get_db()
     async with pool.acquire() as conn:
@@ -413,7 +448,10 @@ async def delete_document(file_id: str):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.get("/indexing/status", tags=["Indexation"])
-async def indexing_status(rag: RAGEngine = Depends(get_rag_engine)):
+async def indexing_status(
+    rag: RAGEngine = Depends(get_rag_engine),
+    _=Depends(verify_api_token),
+):
     """Statistiques de la collection RAG (total chunks, documents, backend)."""
     return await rag.get_collection_stats()
 
@@ -423,6 +461,7 @@ async def index_directory(
     directory: str,
     rag: RAGEngine = Depends(get_rag_engine),
     proc: DocumentProcessor = Depends(get_doc_processor),
+    _=Depends(verify_api_token),
 ):
     """
     Indexe en parallèle tous les fichiers d'un répertoire.
@@ -436,7 +475,10 @@ async def index_directory(
 
 
 @app.post("/indexing/reset", tags=["Indexation"])
-async def reset_collection(rag: RAGEngine = Depends(get_rag_engine)):
+async def reset_collection(
+    rag: RAGEngine = Depends(get_rag_engine),
+    _=Depends(verify_api_token),
+):
     """Vide entièrement la collection RAG (TRUNCATE). Action irréversible."""
     await rag.reset_collection()
     return {"status": "reset", "message": "Collection vidée (TRUNCATE + RESTART IDENTITY)"}
