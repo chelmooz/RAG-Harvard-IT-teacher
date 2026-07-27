@@ -63,7 +63,7 @@ async def _create_extensions(conn: asyncpg.Connection) -> None:
     await conn.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";')
 
 
-async def _create_tables(conn: asyncpg.Connection) -> None:
+async def _create_conversations_table(conn: asyncpg.Connection) -> None:
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS conversations (
             id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -84,6 +84,9 @@ async def _create_tables(conn: asyncpg.Connection) -> None:
                 CHECK (metier IN ('TSSR', 'AIS', 'DevOps') OR metier IS NULL)
         );
     """)
+
+
+async def _create_evaluations_table(conn: asyncpg.Connection) -> None:
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS response_evaluations (
             id                SERIAL PRIMARY KEY,
@@ -98,6 +101,9 @@ async def _create_tables(conn: asyncpg.Connection) -> None:
             UNIQUE(conversation_id)
         );
     """)
+
+
+async def _create_issues_table(conn: asyncpg.Connection) -> None:
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS response_issues (
             id               SERIAL PRIMARY KEY,
@@ -117,6 +123,9 @@ async def _create_tables(conn: asyncpg.Connection) -> None:
             )
         );
     """)
+
+
+async def _create_rag_chunks_table(conn: asyncpg.Connection) -> None:
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS rag_chunks (
             id          BIGSERIAL PRIMARY KEY,
@@ -131,6 +140,13 @@ async def _create_tables(conn: asyncpg.Connection) -> None:
                 UNIQUE (file_id, chunk_index)
         );
     """)
+
+
+async def _create_tables(conn: asyncpg.Connection) -> None:
+    await _create_conversations_table(conn)
+    await _create_evaluations_table(conn)
+    await _create_issues_table(conn)
+    await _create_rag_chunks_table(conn)
 
 
 async def _migrate_embedding_dim(conn: asyncpg.Connection) -> None:

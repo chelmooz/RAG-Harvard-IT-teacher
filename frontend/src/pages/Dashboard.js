@@ -68,7 +68,7 @@ export default function Dashboard() {
         const d = await documentService.listDocuments();
         setDocStats(d);
       } catch {
-        // silent
+        console.warn('Échec chargement documents')
       }
     };
     fetchHealth();
@@ -202,8 +202,14 @@ export default function Dashboard() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, width: '100%', maxWidth: 600 }}>
               {SUGGESTIONS.map(s => {
-                const onEnter = e => { e.currentTarget.style.borderColor = 'rgba(0,229,204,0.4)'; e.currentTarget.style.color = cyan.color; };
-                const onLeave = e => { e.currentTarget.style.borderColor = 'rgba(0,229,204,0.15)'; e.currentTarget.style.color = 'rgba(255,255,255,0.55)'; };
+                const onEnter = e => {
+                  e.currentTarget.style.borderColor = 'rgba(0,229,204,0.4)';
+                  e.currentTarget.style.color = cyan.color;
+                };
+                const onLeave = e => {
+                  e.currentTarget.style.borderColor = 'rgba(0,229,204,0.15)';
+                  e.currentTarget.style.color = 'rgba(255,255,255,0.55)';
+                };
                 return (
                   <div key={s} onClick={() => nav('/terminal')}
                     style={suggestionBox}

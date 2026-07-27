@@ -300,6 +300,25 @@ class DocumentProcessor:
 
     # ── Indexation répertoire (Python 3.13 TaskGroup) ─────────────────────────
 
+    def _validate_directory(self, directory: str) -> Path:
+        dir_path = Path(directory).resolve(strict=False)
+        allowed = self.upload_dir.resolve()
+        if not dir_path.is_relative_to(allowed):
+            raise ValueError(
+                f"Chemin refusé : {dir_path} — seuls les sous-répertoires de "
+                f"{allowed} sont autorisés"
+            )
+        if not dir_path.exists():
+            raise ValueError(f"Répertoire inexistant : {directory}")
+        return dir_path
+
+    @staticmethod
+    def _collect_files(dir_path: Path) -> list[Path]:
+        return [
+            p for p in dir_path.rglob("*")
+            if p.is_file() and p.suffix.lower() in DocumentProcessor.SUPPORTED_FORMATS
+        ]
+
     async def index_directory(
         self,
         directory: str,
@@ -315,21 +334,9 @@ class DocumentProcessor:
 
         try/except dans _process_one : un fichier défaillant n'annule pas tout.
         """
-        dir_path = Path(directory).resolve(strict=False)
-        # Whitelist : seuls les sous-répertoires de upload_dir sont autorisés
-        allowed = self.upload_dir.resolve()
-        if not dir_path.is_relative_to(allowed):
-            raise ValueError(
-                f"Chemin refusé : {dir_path} — seuls les sous-répertoires de "
-                f"{allowed} sont autorisés"
-            )
-        if not dir_path.exists():
-            raise ValueError(f"Répertoire inexistant : {directory}")
+        dir_path = self._validate_directory(directory)
 
-        files = [
-            p for p in dir_path.rglob("*")
-            if p.is_file() and p.suffix.lower() in self.SUPPORTED_FORMATS
-        ]
+        files = self._collect_files(dir_path)
 
         stats = {
             "total_files": len(files),

@@ -3,6 +3,10 @@
  * Centralise tous les appels au backend FastAPI
  * 
  * À placer dans : /frontend/src/services/api.js
+ * 
+ * AUTH : Le token API est injecté globalement via l'instance axios.
+ * Chaque endpoint listé ici est protégé par le backend (verify_api_token).
+ * Voir backend/api/main.py:verify_api_token.
  */
 
 import axios from 'axios';
@@ -26,7 +30,11 @@ const api = axios.create({
 api.interceptors.response.use(
   response => response,
   error => {
-    console.error('API Error:', error.response?.data || error.message);
+    if (error.response?.status === 401) {
+      console.error('API Auth Error: Token invalide. Vérifiez REACT_APP_API_TOKEN dans .env');
+    } else {
+      console.error('API Error:', error.response?.data || error.message);
+    }
     return Promise.reject(error);
   }
 );
@@ -45,7 +53,7 @@ export const chatService = {
    * @param {number} threshold - Seuil de similarité
    * @returns {Promise<ChatResponse>}
    */
-  async sendMessage(query, sessionId = null, metier = null, topK = 5, threshold = 0.7) {
+  async sendMessage({ query, sessionId, metier, topK = 5, threshold = 0.7 }) {
     const response = await api.post('/chat', {
       query,
       session_id: sessionId,

@@ -80,6 +80,50 @@ def format_for_sft(records: list[dict]) -> list[dict]:
     return formatted
 
 
+def _load_model_with_lora(base_model: str, config: dict):
+    logger.info(f"📦 Chargement modèle fp16 : {base_model}")
+    model = AutoModelForCausalLM.from_pretrained(
+        base_model,
+        torch_dtype=torch.float16,
+        device_map="auto",
+        trust_remote_code=True,
+    )
+    model.config.use_cache = False
+
+    lora_cfg = config["lora"]
+    lora_config = LoraConfig(
+        r=lora_cfg.get("r", 16),
+        lora_alpha=lora_cfg.get("alpha", 32),
+        target_modules=lora_cfg.get("target_modules", ["q_proj", "v_proj"]),
+        lora_dropout=lora_cfg.get("dropout", 0.05),
+        bias="none",
+        task_type="CAUSAL_LM",
+    )
+    model = get_peft_model(model, lora_config)
+    model.print_trainable_parameters()
+    return model
+
+
+def _create_training_args(output_dir: str, config: dict) -> TrainingArguments:
+    train_cfg = config["training"]
+    return TrainingArguments(
+        output_dir=output_dir,
+        num_train_epochs=train_cfg.get("num_epochs", 3),
+        per_device_train_batch_size=train_cfg.get("batch_size", 1),
+        gradient_accumulation_steps=train_cfg.get("gradient_accumulation_steps", 8),
+        learning_rate=train_cfg.get("learning_rate", 2e-4),
+        fp16=True,
+        bf16=False,
+        gradient_checkpointing=True,
+        save_steps=train_cfg.get("save_steps", 50),
+        logging_steps=train_cfg.get("logging_steps", 10),
+        warmup_steps=train_cfg.get("warmup_steps", 20),
+        optim="adamw_torch",
+        report_to="none",
+        dataloader_num_workers=0,
+    )
+
+
 def main():
     logger.info("🚀 Prof IA v6.0 — Fine-tuning QLoRA (AMD BC-250 / ROCm 7.2)")
 
@@ -105,50 +149,8 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(base_model, use_fast=True)
     tokenizer.pad_token = tokenizer.eos_token
 
-    # ── Modèle (fp16, pas de bitsandbytes CUDA) ───────────────────────────────
-    # CRITIQUE BC-250 : bitsandbytes n'est pas compatible avec ROCm 7.2 nativement.
-    # On charge en fp16 (≈14 Go pour Mistral 7B) — nécessite que Ollama soit
-    # arrêté pour libérer la VRAM pendant le training.
-    logger.info(f"📦 Chargement modèle fp16 : {base_model}")
-    model = AutoModelForCausalLM.from_pretrained(
-        base_model,
-        torch_dtype=torch.float16,  # fp16 natif RDNA2 (pas bf16)
-        device_map="auto",
-        trust_remote_code=True,
-    )
-    model.config.use_cache = False   # Requis pour gradient checkpointing
-
-    # ── LoRA ───────────────────────────────────────────────────────────────────
-    lora_cfg = config["lora"]
-    lora_config = LoraConfig(
-        r=lora_cfg.get("r", 16),
-        lora_alpha=lora_cfg.get("alpha", 32),
-        target_modules=lora_cfg.get("target_modules", ["q_proj", "v_proj"]),
-        lora_dropout=lora_cfg.get("dropout", 0.05),
-        bias="none",
-        task_type="CAUSAL_LM",
-    )
-    model = get_peft_model(model, lora_config)
-    model.print_trainable_parameters()
-
-    # ── Arguments d'entraînement ───────────────────────────────────────────────
-    train_cfg = config["training"]
-    training_args = TrainingArguments(
-        output_dir=output_dir,
-        num_train_epochs=train_cfg.get("num_epochs", 3),
-        per_device_train_batch_size=train_cfg.get("batch_size", 1),  # 1 pour 12 Go
-        gradient_accumulation_steps=train_cfg.get("gradient_accumulation_steps", 8),
-        learning_rate=train_cfg.get("learning_rate", 2e-4),
-        fp16=True,             # fp16 natif RDNA2 (NON bf16)
-        bf16=False,            # bf16 non supporté sur Cyan Skillfish
-        gradient_checkpointing=True,  # Réduit la VRAM de ~40 %
-        save_steps=train_cfg.get("save_steps", 50),
-        logging_steps=train_cfg.get("logging_steps", 10),
-        warmup_steps=train_cfg.get("warmup_steps", 20),
-        optim="adamw_torch",   # ROCm-compatible (pas d'adamw_apex)
-        report_to="none",      # Désactive W&B / TensorBoard localement
-        dataloader_num_workers=0,  # évite les conflits ROCm + multiprocessing
-    )
+    model = _load_model_with_lora(base_model, config)
+    training_args = _create_training_args(output_dir, config)
 
     # ── SFTTrainer ─────────────────────────────────────────────────────────────
     trainer = SFTTrainer(

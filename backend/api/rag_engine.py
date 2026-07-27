@@ -189,6 +189,36 @@ class RAGEngine:
 
     # ── Retrieval ──────────────────────────────────────────────────────────────
 
+    def _build_retrieve_sql(
+        self, query_vec, top_k: int, threshold: float, metier_filter: Optional[str]
+    ) -> tuple[str, list]:
+        vec = query_vec.tolist()
+        limit = top_k * 2
+        if metier_filter:
+            sql = """
+                WITH ranked AS (
+                    SELECT content, metadata, file_id, filename,
+                           1 - (embedding <=> $1::vector) AS score
+                    FROM rag_chunks
+                    WHERE metadata->>'metier' = $4
+                    ORDER BY embedding <=> $1::vector
+                    LIMIT $2
+                )
+                SELECT content, metadata, file_id, filename, score FROM ranked WHERE score >= $3 ORDER BY score DESC;
+            """
+            return sql, [vec, limit, threshold, metier_filter]
+        sql = """
+            WITH ranked AS (
+                SELECT content, metadata, file_id, filename,
+                       1 - (embedding <=> $1::vector) AS score
+                FROM rag_chunks
+                ORDER BY embedding <=> $1::vector
+                LIMIT $2
+            )
+            SELECT content, metadata, file_id, filename, score FROM ranked WHERE score >= $3 ORDER BY score DESC;
+        """
+        return sql, [vec, limit, threshold]
+
     async def retrieve(
         self,
         query: str,
@@ -213,33 +243,9 @@ class RAGEngine:
             self.embedding_engine.encode_single, query
         )
 
-        if metier_filter:
-            # Requête avec filtre métier — $4 lié par asyncpg, zéro interpolation
-            sql = """
-                WITH ranked AS (
-                    SELECT content, metadata, file_id, filename,
-                           1 - (embedding <=> $1::vector) AS score
-                    FROM rag_chunks
-                    WHERE metadata->>'metier' = $4
-                    ORDER BY embedding <=> $1::vector
-                    LIMIT $2
-                )
-                SELECT * FROM ranked WHERE score >= $3 ORDER BY score DESC;
-            """
-            params: list = [query_vec.tolist(), top_k * 2, threshold, metier_filter]
-        else:
-            # Requête sans filtre — strictement paramétrée
-            sql = """
-                WITH ranked AS (
-                    SELECT content, metadata, file_id, filename,
-                           1 - (embedding <=> $1::vector) AS score
-                    FROM rag_chunks
-                    ORDER BY embedding <=> $1::vector
-                    LIMIT $2
-                )
-                SELECT * FROM ranked WHERE score >= $3 ORDER BY score DESC;
-            """
-            params = [query_vec.tolist(), top_k * 2, threshold]
+        sql, params = self._build_retrieve_sql(
+            query_vec, top_k, threshold, metier_filter
+        )
 
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(sql, *params)
@@ -260,6 +266,45 @@ class RAGEngine:
         return results
 
     # ── Indexation ─────────────────────────────────────────────────────────────
+
+    def _validate_embeddings(
+        self, embeddings: np.ndarray, filename: str
+    ) -> None:
+        if not np.isfinite(embeddings).all():
+            nan_chunks = int(np.sum(~np.isfinite(embeddings).any(axis=1)))
+            logger.error(
+                f"❌ {nan_chunks} vecteurs NaN détectés dans « {filename} » "
+                f"— probable OOM GPU partiel — indexation annulée"
+            )
+            raise RuntimeError(
+                f"{nan_chunks} embeddings NaN dans {filename} — vérifiez la VRAM disponible"
+            )
+
+    @staticmethod
+    def _build_index_records(
+        chunks: List[Dict[str, Any]],
+        embeddings: np.ndarray,
+        file_id: str,
+        filename: str,
+    ) -> list[tuple]:
+        records = []
+        for i, (chunk, emb) in enumerate(zip(chunks, embeddings)):
+            meta = {
+                "source": filename,
+                "chunking_method": chunk.get("metadata", {}).get(
+                    "chunking_method", "unknown"
+                ),
+                **chunk.get("metadata", {}),
+            }
+            records.append((
+                file_id,
+                filename,
+                i,
+                chunk["text"],
+                meta,
+                emb.tolist(),
+            ))
+        return records
 
     async def index_chunks(
         self,
@@ -283,40 +328,13 @@ class RAGEngine:
         texts = [c["text"] for c in chunks]
         logger.info(f"🔢 Encodage batch : {len(texts)} chunks pour « {filename} »...")
 
-        # Unique appel GPU — tous les embeddings d'un fichier en une passe
         embeddings = await asyncio.to_thread(
             self.embedding_engine.encode, texts
         )
 
-        # Guard NaN — OOM GPU partiel sur GDDR6 unifiée BC-250
-        if not np.isfinite(embeddings).all():
-            nan_chunks = int(np.sum(~np.isfinite(embeddings).any(axis=1)))
-            logger.error(
-                f"❌ {nan_chunks} vecteurs NaN détectés dans « {filename} » "
-                f"— probable OOM GPU partiel — indexation annulée"
-            )
-            raise RuntimeError(
-                f"{nan_chunks} embeddings NaN dans {filename} — vérifiez la VRAM disponible"
-            )
-        logger.debug(f"✅ Embeddings validés (shape={embeddings.shape}, finite=True)")
+        self._validate_embeddings(embeddings, filename)
 
-        records = []
-        for i, (chunk, emb) in enumerate(zip(chunks, embeddings)):
-            meta = {
-                "source": filename,
-                "chunking_method": chunk.get("metadata", {}).get(
-                    "chunking_method", "unknown"
-                ),
-                **chunk.get("metadata", {}),
-            }
-            records.append((
-                file_id,
-                filename,
-                i,                 # chunk_index — UNIQUE avec file_id (FIX BUG#4)
-                chunk["text"],
-                meta,
-                emb.tolist(),      # pgvector accepte list[float]
-            ))
+        records = self._build_index_records(chunks, embeddings, file_id, filename)
 
         async with self._pool.acquire() as conn:
             await conn.executemany(

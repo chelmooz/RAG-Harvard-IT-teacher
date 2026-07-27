@@ -46,8 +46,14 @@ export default function DesignPicker() {
 
       <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', justifyContent: 'center' }}>
         {DESIGNS.map(({ id, path, icon, title, color, desc }) => {
-          const onEnter = e => { e.currentTarget.style.background = 'rgba(0,229,204,0.05)'; e.currentTarget.style.transform = 'translateY(-4px)'; };
-          const onLeave = e => { e.currentTarget.style.background = 'rgba(10,15,15,0.85)'; e.currentTarget.style.transform = 'none'; };
+          const onEnter = e => {
+            e.currentTarget.style.background = 'rgba(0,229,204,0.05)';
+            e.currentTarget.style.transform = 'translateY(-4px)';
+          };
+          const onLeave = e => {
+            e.currentTarget.style.background = 'rgba(10,15,15,0.85)';
+            e.currentTarget.style.transform = 'none';
+          };
           return (
             <div key={id} onClick={() => nav(path)}
               className="hud-card"
@@ -55,8 +61,8 @@ export default function DesignPicker() {
               onMouseEnter={onEnter}
               onMouseLeave={onLeave}>
               <div style={{ fontSize: 28, color, marginBottom: 12, fontFamily: 'Share Tech Mono' }}>{icon}</div>
-              <div style={{ fontSize: 10, letterSpacing: 3, color: 'rgba(255,255,255,0.35)', marginBottom: 4 }}>Design {id}</div>
-              <div style={{ fontFamily: 'Rajdhani', fontWeight: 700, fontSize: 22, letterSpacing: 3, color, marginBottom: 12 }}>
+              <div className="design-label">Design {id}</div>
+              <div className="design-title" style={{ color }}>
                 {title}
               </div>
               <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', lineHeight: 1.7 }}>{desc}</p>
