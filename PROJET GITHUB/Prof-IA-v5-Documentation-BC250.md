@@ -116,8 +116,58 @@ Variable Valeur Pourquoi critique
 OLLAMA_NUM_PARALLEL 1 Évite la saturation mémoire (1 seule
 requête LLM à la fois)
 
-OLLAMA_NUM_GPU 24 Expose tous les CUs RDNA2 à Ollama
+OLLAMA_NUM_GPU 99 Nombre de LAYERS du modèle chargées sur GPU (PAS le nombre
+de CUs — 99 = convention Ollama pour "toutes les layers", cf. FIX BUG#5 dans
+rag_engine.py). Le déblocage matériel des CUs (24→40) est indépendant et se
+fait au niveau du module amdgpu, voir section "Déblocage 40 CU" ci-dessous et
+scripts/unlock-40cu.sh.
 
+
+## 1.bis Déblocage 40 CU RDNA2 (optionnel)
+
+Le BC-250 sort d'usine avec **24 des 40 Compute Units RDNA2 actifs**. Les 16
+restants ne sont pas endommagés : ils sont fusionnés (fused off) en firmware.
+Le déblocage est un travail communautaire (crédit **duggasco**,
+[bc250-40cu-unlock](https://github.com/duggasco/bc250-40cu-unlock)), documenté
+dans [elektricm.github.io/amd-bc250-docs/system/40cu-unlock](https://elektricm.github.io/amd-bc250-docs/system/40cu-unlock/).
+
+**Ce que ça modifie** : deux registres matériels, écrits par le module amdgpu
+patché au boot (aucune modification firmware permanente) :
+
+| Registre | Rôle | Stock | Débloqué |
+|---|---|---|---|
+| `CC_GC_SHADER_ARRAY_CONFIG` | Nombre de CUs annoncé au driver | `0xfff80000` (24) | `0xffe00000` (40) |
+| `SPI_PG_ENABLE_STATIC_WGP_MASK` | Où le SPI dispatche les wavefronts | `0x07` | `0x1F` |
+
+**Gain mesuré** (Vulkan `llama-bench pp512`, 1500 MHz) : 230 → 371 tok/s
+(**1.61x**), +30 W, +4°C. En 3D, le gain est marginal (+4.4% glmark2) car le
+rendu graphique est fill-rate bound, pas CU-bound — c'est un déblocage
+compute, pas un déblocage gaming.
+
+**Dans ce projet** : le script `scripts/unlock-40cu.sh` clone le dépôt
+communautaire, vérifie votre "harvest pattern" (`cu_map.sh` — certaines cartes
+ont des CUs réellement défectueux au-delà des 24 stock), lance l'installeur
+Debian/Ubuntu, vérifie le résultat via `dmesg | grep active_cu_number`, puis
+met à jour `.env` (`AMD_RDNA2_CUS=40`, `AMD_CU_UNLOCK_APPLIED=true`). C'est
+cette variable — pas `OLLAMA_NUM_GPU` — qui pilote le calcul
+`PYTORCH_HIP_ALLOC_CONF` et la taille de batch d'embeddings dans
+`config.py`/`rag_engine.py`.
+
+**À savoir avant d'activer** :
+
+- Le module amdgpu est reconstruit hors-arbre → à refaire après chaque mise
+  à jour du noyau (ou épingler le kernel).
+- Toutes les cartes ne se débloquent pas proprement : pattern de fusion
+  contigu (CU 0-5 actifs / 6-9 fusionnés, identique sur les 4 shader arrays)
+  → généralement propre ; pattern dispersé → CUs potentiellement défectueux,
+  prévoir le test de santé par WGP (`bc250-cu-health-test.sh` +
+  `bc250-cu-mask.sh`).
+- En sustained load à 40 CU / 2 GHz, le radiateur stock throttle (89-107°C
+  mesurés sur 10 min). Plafonner le gouverneur à **1500 MHz / 900 mV**
+  capture l'essentiel du gain (1.61x) sans problème thermique.
+- Secure Boot doit être désactivé, ou le module signé manuellement.
+- Réversible : `scripts/unlock-40cu.sh disable` / `restore` reviennent au
+  stock 24 CU à partir de la sauvegarde automatique du module d'origine.
 
 ## 2. Paquets Installés et Versions Actuelles
 

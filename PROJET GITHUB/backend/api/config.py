@@ -48,7 +48,15 @@ class Settings(BaseSettings):
     HSA_OVERRIDE_GFX_VERSION: str = "10.1.3"  # Cyan Skillfish → gfx1013
     AMD_GTT_SIZE_MB:          int = 12288      # = amdgpu.gttsize (paramètre kernel)
     AMD_ZEN2_CORES:           int = 6
+    # 24 = stock (16 CUs fusionnés en firmware). Après déblocage 40 CU
+    # (scripts/unlock-40cu.sh, cf. install.sh étape 9/9), passer à 40
+    # dans .env — NE JAMAIS mettre 40 ici sans avoir vérifié au préalable
+    # `sudo dmesg | grep active_cu_number` (doit afficher 40, pas 24).
     AMD_RDNA2_CUS:            int = 24
+    # true uniquement si le module amdgpu patché (bc250-40cu-unlock) est
+    # chargé ET vérifié via dmesg. Sert à afficher un avertissement cohérent
+    # au démarrage — ne modifie aucun registre matériel à lui seul.
+    AMD_CU_UNLOCK_APPLIED:    bool = False
 
     # ── RAG (pgvector) ───────────────────────────────────────────
     RAG_THRESHOLD:  float = 0.72  # seuil de similarité cosine
@@ -132,6 +140,25 @@ def get_settings() -> Settings:
         logger.warning(
             "⚠️  CORS_ORIGINS='*' en mode non DEBUG — restreignez les origines "
             "dans .env (ex: CORS_ORIGINS=http://localhost:3000) en production."
+        )
+
+    if s.AMD_RDNA2_CUS not in (24, 40):
+        logger.warning(
+            f"⚠️  AMD_RDNA2_CUS={s.AMD_RDNA2_CUS} inhabituel (24=stock, 40=débloqué). "
+            "Vérifiez votre .env."
+        )
+    if s.AMD_RDNA2_CUS == 40 and not s.AMD_CU_UNLOCK_APPLIED:
+        logger.warning(
+            "⚠️  AMD_RDNA2_CUS=40 mais AMD_CU_UNLOCK_APPLIED=False — "
+            "si le module amdgpu patché (bc250-40cu-unlock) n'est pas chargé, "
+            "cette valeur est juste un mensonge de config qui fausse "
+            "PYTORCH_HIP_ALLOC_CONF et EMBEDDING_BATCH_SIZE. "
+            "Vérifiez avec : sudo dmesg | grep active_cu_number"
+        )
+    if s.AMD_RDNA2_CUS == 24 and s.AMD_CU_UNLOCK_APPLIED:
+        logger.warning(
+            "⚠️  AMD_CU_UNLOCK_APPLIED=True mais AMD_RDNA2_CUS=24 — "
+            "mettez AMD_RDNA2_CUS=40 dans .env pour que le calcul mémoire en profite."
         )
 
     os.environ.setdefault("HSA_OVERRIDE_GFX_VERSION", s.HSA_OVERRIDE_GFX_VERSION)

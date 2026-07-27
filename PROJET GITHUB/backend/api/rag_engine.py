@@ -34,6 +34,10 @@ os.environ.setdefault("PYTORCH_HIP_ALLOC_CONF", "max_split_size_mb:512")
 import torch
 from sentence_transformers import SentenceTransformer
 
+from .config import get_settings
+
+_settings = get_settings()
+
 
 # ── Détection GPU AMD ──────────────────────────────────────────────────────────
 
@@ -48,7 +52,9 @@ def _get_device() -> torch.device:
         props = torch.cuda.get_device_properties(0)
         logger.info(
             f"🟢 GPU AMD détecté : {props.name} | "
-            f"{props.total_memory // 1024**2} Mo GDDR6 unifiée"
+            f"{props.total_memory // 1024**2} Mo GDDR6 unifiée | "
+            f"{_settings.AMD_RDNA2_CUS} CUs configurés "
+            f"({'débloqué 40 CU' if _settings.AMD_CU_UNLOCK_APPLIED else 'stock 24 CU'})"
         )
         return dev
     logger.warning("⚠️  Pas de GPU ROCm détecté — exécution CPU (performances dégradées)")
@@ -62,10 +68,11 @@ DEVICE = _get_device()
 
 class EmbeddingEngine:
     """
-    Moteur d'embeddings vectorisé pour les 24 CUs RDNA2.
+    Moteur d'embeddings vectorisé pour RDNA2 (24 CUs stock, 40 CUs si débloqués
+    via scripts/unlock-40cu.sh — voir AMD_RDNA2_CUS dans config.py).
 
     Design :
-    - SentenceTransformer en batch de BATCH_SIZE=64 → utilisation maximale des CUs.
+    - SentenceTransformer en batch de BATCH_SIZE (mis à l'échelle des CUs disponibles).
     - fp16 : divise la VRAM par 2, suffisant pour la similarité cosine.
     - normalize_embeddings=True : produit scalaire = similarité cosine (2× plus rapide).
 
@@ -73,7 +80,12 @@ class EmbeddingEngine:
     Inverser l'ordre invalide la compilation triton (le graphe compilé devient fp32).
     """
 
-    BATCH_SIZE = 64      # Calibré pour 24 CUs RDNA2
+    # Calibré pour 24 CUs RDNA2 (64) ; mis à l'échelle si 40 CU débloqués.
+    # EMBEDDING_BATCH_SIZE (.env) reste la valeur d'autorité si définie.
+    BATCH_SIZE = max(
+        64,
+        round(64 * _settings.AMD_RDNA2_CUS / 24)
+    ) if not os.environ.get("EMBEDDING_BATCH_SIZE") else int(os.environ["EMBEDDING_BATCH_SIZE"])
     MODEL_NAME = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
 
     def __init__(self, model_name: str = MODEL_NAME):

@@ -42,6 +42,7 @@ docker compose build --build-arg USE_ROCM=false backend
 ## Table des matières
 
 1. [Caractéristiques de la Stack v6.0](#1-caractéristiques-de-la-stack-v60)
+   - [1.4 Déblocage 40 CU RDNA2 (optionnel)](#14-déblocage-40-cu-rdna2-optionnel)
 2. [Paquets Installés et Versions](#2-paquets-installés-et-versions)
 3. [Architecture — PostgreSQL + pgvector HNSW](#3-architecture--postgresql--pgvector-hnsw)
 4. [Formats de Fichiers Supportés](#4-formats-de-fichiers-supportés)
@@ -60,7 +61,7 @@ docker compose build --build-arg USE_ROCM=false backend
 |---|---|---|
 | APU | AMD BC-250 — Cyan Skillfish (gfx1013) | Cible d'optimisation principale |
 | Architecture CPU | 6 cœurs × Zen 2 @ ~3,0 GHz | asyncio TaskGroup Python 3.13 |
-| Architecture GPU | 24 Compute Units RDNA2 | Batch embeddings, inference Ollama |
+| Architecture GPU | 24 Compute Units RDNA2 (40 CU débloquables — [voir §1.4](#14-déblocage-40-cu-rdna2-optionnel)) | Batch embeddings, inference Ollama |
 | Mémoire | 16 Go GDDR6 unifiée (partagée CPU+GPU) | Zéro copie PCIe, accès direct |
 | VRAM allouée | 12 Go (amdgpu.gttsize=12288) | LLM + embeddings simultanés |
 | Stockage principal | SSD NVMe interne | OS, Docker, modèles Ollama |
@@ -99,9 +100,37 @@ Ces variables doivent être définies avant tout import PyTorch sous peine de fa
 | `PYTORCH_HIP_ALLOC_CONF` | `max_split_size_mb:512` | Limite la fragmentation mémoire GDDR6 |
 | `amdgpu.gttsize` | `12288` (GRUB) | Alloue 12 Go de VRAM sur les 16 Go GDDR6 partagés |
 | `OLLAMA_NUM_PARALLEL` | `1` | Évite la saturation mémoire (1 seule requête LLM à la fois) |
-| `OLLAMA_NUM_GPU` | `24` | Expose tous les CUs RDNA2 à Ollama |
+| `OLLAMA_NUM_GPU` | `99` | Nombre de *layers* du modèle chargées sur GPU (PAS le nombre de CUs — 99 = convention Ollama pour "toutes les layers") |
 | `OLLAMA_KEEP_ALIVE` | `24h` | Maintient le modèle en VRAM 24h sans rechargement |
 | `CORS_ORIGINS` | Configurable `.env` | Origines autorisées — modifiable sans rebuild |
+
+### 1.4 Déblocage 40 CU RDNA2 (optionnel)
+
+Le BC-250 sort d'usine avec **24 des 40 Compute Units RDNA2 actifs** — les 16
+restants ne sont pas endommagés, ils sont fusionnés (fused off) en firmware.
+Un déblocage communautaire existe (crédit **duggasco**,
+[bc250-40cu-unlock](https://github.com/duggasco/bc250-40cu-unlock)), documenté
+sur [elektricm.github.io/amd-bc250-docs/system/40cu-unlock](https://elektricm.github.io/amd-bc250-docs/system/40cu-unlock/).
+
+- **Gain mesuré** : ~1.61x en calcul (Vulkan `llama-bench pp512`), gain marginal
+  en 3D (déblocage compute, pas gaming).
+- **Dans ce projet** : `scripts/unlock-40cu.sh` clone le dépôt communautaire,
+  vérifie le *harvest pattern* de la carte, lance l'installeur, vérifie le
+  résultat (`dmesg | grep active_cu_number`), et met à jour `.env`
+  (`AMD_RDNA2_CUS=40`, `AMD_CU_UNLOCK_APPLIED=true`).
+- Proposé comme étape **9/9 optionnelle** dans `install.sh` (confirmation
+  demandée avant exécution).
+- ⚠️ Pas garanti sur toutes les cartes (harvest pattern dispersé = CUs
+  potentiellement défectueux), reconstruit le module `amdgpu` hors-arbre (à
+  refaire après chaque MAJ noyau), nécessite un plafond gouverneur à 1500 MHz
+  en sustained load pour rester dans une enveloppe thermique raisonnable.
+  Réversible via `scripts/unlock-40cu.sh disable` / `restore`.
+
+```bash
+./scripts/unlock-40cu.sh          # lance le déblocage (interactif)
+./scripts/unlock-40cu.sh verify   # vérifie après reboot
+./scripts/unlock-40cu.sh disable  # revient au stock 24 CU
+```
 
 ---
 
@@ -494,7 +523,7 @@ Navigateur PC Windows (192.168.1.16)
 ┌──────────────────────┐
 │  Ollama              │  Mistral 7B Q4_K_M (~4.5 Go VRAM)
 │  prof-ia-ollama-rocm │  ou DeepSeek R1 7B (~4.7 Go VRAM)
-│  GPU RDNA2 24 CUs    │  OLLAMA_KEEP_ALIVE=24h
+│  GPU RDNA2 24/40 CU  │  OLLAMA_KEEP_ALIVE=24h — 40 CU si unlock-40cu.sh appliqué
 └──────────────────────┘
                │  réponse texte
                ▼
