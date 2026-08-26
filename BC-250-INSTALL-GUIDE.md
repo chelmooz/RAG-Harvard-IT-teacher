@@ -106,6 +106,15 @@ cd scripts/bazzite
 ./setup.sh
 ```
 
+> **Note** : les scripts `.sh` n'ont pas besoin d'être rendus exécutables manuellement —
+> `setup.sh` s'en charge automatiquement (`chmod +x` sur `/opt/bc250/*.sh` et installation
+> de `bc250-game-mode` dans `/usr/local/bin`). Si tu dois les lancer hors `setup.sh` :
+> ```bash
+> chmod +x scripts/bc250/*.sh
+> sudo cp scripts/bc250/bc250-game-mode.sh /usr/local/bin/bc250-game-mode
+> sudo chmod +x /usr/local/bin/bc250-game-mode
+> ```
+
 Le script fait, dans l'ordre :
 1. `rpm-ostree kargs --append-if-missing="ttm.pages_limit=3014656"` → split 12/4 Go.
 2. Install governor `cyan-skillfish-governor-smu` (COPR `filippor/bazzite`).
