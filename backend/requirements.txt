@@ -41,7 +41,9 @@ openpyxl==3.1.5
 
 # ── Audio / Transcription ─────────────────────────────────────────────────────
 # Whisper "base" = 145 Mo → tient dans 12 Go VRAM avec Mistral Q4 chargé
-openai-whisper==20240930
+# 20250625 : pyproject.toml (plus de setup.py legacy avec pkg_resources)
+# Compatible pip 26+ build isolation sans --no-build-isolation
+openai-whisper==20250625
 ffmpeg-python==0.2.0
 
 # ── API / Async ───────────────────────────────────────────────────────────────

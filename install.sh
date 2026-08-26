@@ -111,7 +111,7 @@ if [[ ! -d "$VENV_DIR" ]]; then
 fi
 source "$VENV_DIR/bin/activate"
 
-pip install --upgrade pip setuptools wheel -q
+pip install --upgrade pip wheel -q
 
 # ── 6. PyTorch ROCm 7.2 ──────────────────────────────────────────────────────
 info "6/9 Installation PyTorch ROCm 7.2..."
@@ -138,8 +138,10 @@ if torch.cuda.is_available():
 
 # ── 7. Dépendances Prof IA v5 ─────────────────────────────────────────────────
 info "7/9 Installation dépendances Prof IA v5..."
+# P0 FIX: --extra-index-url (ajoute ROCm) au lieu de --index-url (remplace PyPI)
+# L'index ROCm ne contient QUE torch/torchvision/torchaudio.
 pip install -r backend/requirements.txt \
-    --index-url "$ROCM_INDEX" -q
+    --extra-index-url "$ROCM_INDEX" -q
 info "✅ Dépendances Python installées"
 
 # ── 8. Ollama Vulkan ──────────────────────────────────────────────────────────
