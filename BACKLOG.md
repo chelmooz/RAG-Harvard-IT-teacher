@@ -106,3 +106,25 @@ Prêt pour **soumission à audit** : corrections tracées, justifiées par le co
   - `config.py` : champ `AMD_ZEN2_CORES` (défini, jamais lu nulle part).
 - **Vérif post-retrait** : ruff F OK + py_compile OK.
 - Hors périmètre revue : `scripts/bc250/` (vendored MIT tiers, exclus), `frontend/` (léger, non audité en profondeur), `vault/` (LLM wiki).
+
+## 2026-08-26 — Audit externe + remédiation BC-250 (gaps critiques)
+
+- **Audit externe** (modèle indépendant, 70/100 GO conditionnel) : ruff rouge (config complète),
+  README §7 auto-éval non implémentée, `mem_limit` docker absent, image Ollama `:latest`,
+  dette style. -> Tout corrigé (commit `d0cfd89` + `git filter-repo` purge `user:user`,
+  remote `origin` ré-ajouté). Force-push requis si push (historique réécrit).
+- **Comparaison vs référentiel `AMD-BC-250-at-his-Best` (bc250-beast, modules 00-09)** :
+  révèle gaps dans nos `scripts/bc250` :
+  - 🔴 **BUG critique** : `apply_phase1.sh` invoquait les outils vendored SANS sous-commande
+    (CU→menu interactif, cores→RuntimeError, OC→no-op) → aucune optimisation réellement appliquée.
+    CORRIGÉ : `enable all`+`write-service-table` (CU), `apply` (cores), `bc250_detect --frequency/--vid/--temp -c` → `bc250_apply --apply` (OC), avec valeurs par défaut 3850 MHz/1150 mV (env-overridable).
+  - ⚠️ **zswap + swapfile Btrfs 32G + mitigations=off** ajoutés dans `scripts/bazzite/setup.sh`
+    (module 07) — critique pour les 4 Go CPU du serveur RAG (anti-OOM).
+  - ⚠️ **config.toml du governor** généré (`/etc/cyan-skillfish-governor/config.toml`, safe-points 350→2000 MHz).
+  - ⚠️ **`validate.sh`** créé (équivalent module 09) : CU/cœurs/VRAM/temp/**tension ≤1300 mV
+    (FAIL dur)/services + score + stress optionnel.
+  - 🟡 `health-check.sh` étendu (VRAM BIOS, services, garde-fou tension en warning ; exit sur CU+cœurs).
+- **Vérif** : `bash -n` OK sur apply_phase1/health-check/validate/setup.
+- **Non fait (optionnel)** : vendoriser `bc250-uefi-menu` (BIOS flash 8c persistant), extras
+  (NullVRS/Turing), checklist module 01, preflight module 00.
+- Non commité (le « go » visait l'implémentation, pas le commit).

@@ -96,6 +96,55 @@ if [ -d "$BC250_GPUFIX" ]; then
     fi
 fi
 
+# ── 7b. System tuning : zswap + swapfile + mitigations (anti-crash RAM/VRAM) ───
+# Sur 16 Go unifiés avec 4 Go CPU pour le serveur RAG, l'absence de swap/zswap
+# fait planter Ollama/Postgres sur un pic mémoire. Important pour notre usage
+# hybride (module 07 de bc250-beast). Nécessite reboot (rpm-ostree kargs).
+info "System tuning : zswap + swapfile Btrfs + mitigations=off..."
+sudo rpm-ostree kargs --append-if-missing="zswap.enabled=1" 2>/dev/null || warn "karg zswap.enabled non appliqué (reboot/ostree ?)"
+sudo rpm-ostree kargs --append-if-missing="zswap.max_pool_percent=25" 2>/dev/null || true
+sudo rpm-ostree kargs --append-if-missing="zswap.compressor=lz4" 2>/dev/null || true
+sudo rpm-ostree kargs --append-if-missing="systemd.zram=0" 2>/dev/null || true
+sudo rpm-ostree kargs --append-if-missing="mitigations=off" 2>/dev/null || warn "karg mitigations=off non appliqué"
+sudo rpm-ostree initramfs --enable --arg=--add-drivers --arg=lz4 2>/dev/null || warn "initramfs lz4 : ignoré (peut déjà être présent)"
+
+# Swapfile Btrfs 32G sur /var (procédure Bazzite officielle)
+if findmnt -no FSTYPE /var 2>/dev/null | grep -qi btrfs; then
+    info "Création swapfile Btrfs 32G sur /var/swap..."
+    sudo btrfs subvolume create /var/swap 2>/dev/null || true
+    sudo btrfs filesystem mkswapfile --size 32G /var/swap/swapfile 2>/dev/null \
+        || warn "mkswapfile a échoué (espace ?) — swap non créé."
+    if [ -f /var/swap/swapfile ]; then
+        grep -q '/var/swap/swapfile' /etc/fstab 2>/dev/null || \
+            echo '/var/swap/swapfile none swap defaults,nofail 0 0' | sudo tee -a /etc/fstab >/dev/null
+        sudo swapon -a 2>/dev/null || true
+        echo 'vm.swappiness=120' | sudo tee /etc/sysctl.d/99-swappiness.conf >/dev/null
+        sudo sysctl -p /etc/sysctl.d/99-swappiness.conf 2>/dev/null || true
+    fi
+else
+    warn "/var n'est pas Btrfs ici — créez un swapfile classique manuellement (zswap seul actif)."
+fi
+
+# lm_sensors (températures/voltage pour validate.sh)
+sudo rpm-ostree install lm_sensors 2>/dev/null || warn "lm_sensors indispo (validate.sh perdra les températures)."
+
+# ── 7c. Config du governor GPU cyan-skillfish (safe-points) ─────────────────────
+info "Génération /etc/cyan-skillfish-governor/config.toml (safe-points 350->2000 MHz)..."
+GPU_FREQ_MHZ="${GPU_FREQ_MHZ:-2000}"
+sudo mkdir -p /etc/cyan-skillfish-governor
+sudo tee /etc/cyan-skillfish-governor/config.toml >/dev/null <<EOF
+# Généré par scripts/bazzite/setup.sh — tester la config manuellement avant boot auto.
+target-temperature = 85
+
+[[safe-points]]
+frequency = 350
+voltage = 700
+
+[[safe-points]]
+frequency = ${GPU_FREQ_MHZ}
+EOF
+info "Governor : editez config.toml et activez le service (systemctl enable --now cyan-skillfish-governor-smu)."
+
 # ── 8. Memory OC (GDDR6) — optionnel, garde-fous stricts ──────────────────────
 warn "Memory OC (GDDR6) NON automatisé par défaut. Sur Cyan Skillfish l'OD sysfs"
 warn "est souvent absent : utilisez bc250-game-mode + le réglage BIOS/CMOS, ou"

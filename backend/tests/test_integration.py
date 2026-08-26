@@ -13,6 +13,9 @@ import os
 import pytest
 import pytest_asyncio
 
+# Marqueur pour que -m "not integration" fonctionne dans la CI
+pytestmark = pytest.mark.integration
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # TESTS D'INTÉGRATION — Nécessite PostgreSQL (docker-compose up postgres)
 # ══════════════════════════════════════════════════════════════════════════════

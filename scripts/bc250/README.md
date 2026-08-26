@@ -13,7 +13,8 @@ voir `CREDITS.md` à la racine). Ils implémentent les leviers validés dans
 | UV/OC CPU | `smu-oc/bc250_apply.py` (+ `bc250_smu/`) | bc250-collective/bc250_smu_oc | SMU `0x8F/0x50/0x8B/0x8C/0x9A` |
 | Memory OC (GDDR6) | `mem-oc/mem_oc.sh` | toolkit maison (gardes) | sysfs `pp_od_clk_voltage` (si dispo) — sinon BIOS/CMOS |
 | Orchestration | `apply_phase1.sh` | toolkit maison | 40 CU → 8c → UV/OC + health-check |
-| Health-check | `health-check.sh` | toolkit maison | dmesg CU + nproc cœurs |
+| Health-check | `health-check.sh` | toolkit maison | dmesg CU + nproc cœurs (+ VRAM/services/tension) |
+| Validation | `validate.sh` | toolkit maison | batterie tests + stress + score (garde-fou tension 1300 mV) |
 | Service boot | `bc250-optimizations.service` | toolkit maison | systemd `Restart=on-failure` + limite |
 | Mode JEU/RAG | `bc250-game-mode.sh` | toolkit maison | libère/réserve VRAM Ollama |
 
@@ -34,14 +35,21 @@ Le split RAM/VRAM (12 Go GPU / 4 Go CPU) est géré par `scripts/bazzite/setup.s
 ## Utilisation
 
 ```bash
-# 40 CU (UMR, nécessite umr + droits)
-sudo ./40cu-unlock/bc250-cu-live-manager.sh
+# Orchestration complète (40 CU + 8c + UV/OC + health-check) — appelée par le service boot
+sudo ./apply_phase1.sh
+
+# Validation / stress (score + garde-fou tension 1300 mV)
+sudo ./validate.sh
+
+# 40 CU (UMR, nécessite umr + droits) — apply_phase1 le fait déjà
+sudo ./40cu-unlock/bc250-cu-live-manager.sh enable all
 
 # 8 cœurs Zen2
-python3 ./core-unlock/bc250-unlock-cores.py
+python3 ./core-unlock/bc250-unlock-cores.py apply
 
-# UV/OC CPU (éditer bc250_apply.py / config d'abord)
-python3 ./smu-oc/bc250_apply.py
+# UV/OC CPU : bc250_detect génère la conf, bc250_apply l'applique
+python3 ./smu-oc/bc250_detect.py --frequency 3850 --vid 1150 --temp 90 --keep -c /etc/bc250-smu-oc.conf
+python3 ./smu-oc/bc250_apply.py --apply /etc/bc250-smu-oc.conf
 ```
 
 > Phase 2 (opt-in) : noyau Bazzite custom (patches MastaG/linux-cachyos-bc250 0001-0009)

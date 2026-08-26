@@ -136,6 +136,7 @@ Après reboot, vérifie chaque brique. **Rôles** et **dépendances** :
 | `bc250_apply.py` | **UV/OC CPU** (profil Mild) | `python3` + `bc250_smu/` | `sudo dmesg | grep -i smu` (pas d'erreur) |
 | `bc250-game-mode` | Bascule JEU⇄RAG (libère/réserve VRAM) | Ollama | `bc250-game-mode status` |
 | `bc250-gpu-fix.service` | Corrige util GPU bloquée à 655 % | rust (build) ou binaire | `systemctl status bc250-gpu-fix` + `btop` affiche % réel |
+| `validate.sh` | Batterie de validation (CU/cœurs/VRAM/temp/**tension ≤1300 mV**/services + score) | outils ci-dessus | `sudo /opt/bc250/validate.sh` → score 100% |
 
 **Commandes de vérif (copier-coller) :**
 ```bash
@@ -175,10 +176,13 @@ amdgpu_top                 # la ligne VRAM doit monter ~9 Go après un premier q
 ## Étape 7 — Stress test & validation finale (OBLIGATOIRE avant prod)
 
 ```bash
-# CPU 8 cœurs
+# Validation automatisée (score + garde-fou tension dur 1300 mV) :
+sudo /opt/bc250/validate.sh
+# -> vérifie 8c/40CU/VRAM 512Mo/services/temp/tension, propose stress-ng + FurMark
+
+# Stress manuel complémentaire :
 stress-ng --cpu 16 --timeout 300s
 # GPU 40 CU (Vulkan) — ex. llama-bench ou un jeu Steam/Proton
-# Températures (ne pas dépasser ~90 °C CPU/GPU, GPU air ≤ 2,2–2,4 GHz)
 amdgpu_top
 ```
 Surveille `dmesg` pour toute erreur SMU/AMDGPU. Si crash/instable → réduire le profil UV/OC
@@ -202,11 +206,14 @@ Surveille `dmesg` pour toute erreur SMU/AMDGPU. Si crash/instable → réduire l
 ```
 setup.sh
  ├─ kargs ttm.pages_limit=3014656   (split 12/4 Go)
- ├─ governor cyan-skillfish (COPR)  (limites GPU)
- ├─ umr          ─────────────────► 40 CU (bc250-cu-live-manager.sh)
- ├─ python3 + bc250_smu ──────────► 8 cœurs (bc250-unlock-cores.py)
- │                                 └► UV/OC  (bc250_apply.py)
+ ├─ kargs zswap.enabled=1 + mitigations=off   (anti-crash RAM/VRAM, reboot requis)
+ ├─ swapfile Btrfs 32G (/var/swap) + vm.swappiness=120
+ ├─ governor cyan-skillfish (COPR)  (limites GPU) + /etc/cyan-skillfish-governor/config.toml
+ ├─ umr          ─────────────────► 40 CU (bc250-cu-live-manager.sh : enable all + write-service-table)
+ ├─ python3 + bc250_smu ──────────► 8 cœurs (bc250-unlock-cores.py apply)
+ │                                 └► UV/OC  (bc250_detect.py -> bc250_apply.py --apply)
  ├─ bc250-optimizations.service ──► apply_phase1.sh → health-check.sh
+ ├─ validate.sh (batterie de validation + score)
  ├─ bc250-game-mode (usr/local/bin)
- └─ monitoring: btop htop amdgpu_top mangohud + bc250-gpu-fix
+ └─ monitoring: btop htop amdgpu_top mangohud + bc250-gpu-fix + lm_sensors
 ```
