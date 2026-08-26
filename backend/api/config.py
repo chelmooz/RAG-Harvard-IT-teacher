@@ -10,21 +10,22 @@ CORRECTIFS v6.0 :
   - pg18    : PostgreSQL 18.2 (cohérent avec toute la documentation)
   - Ports   : tout ouvert — réseau local isolé (LAN derrière pare-feu)
   - CORS    : toutes origines autorisées (*)
-  - JWT     : validation assouplie — token utilisé pour l'auth GitHub datasets
+  - JWT     : aucun JWT émis — API_TOKEN sert uniquement à sécuriser l'API locale (pas d'accès GitHub)
 CORRECTIFS v6.0 CONSERVÉS :
   - FIX BUG#1 : main.py créé
   - FIX BUG#2 : Dockerfiles créés
   - FIX BUG#3 : nginx.conf créé
   - FIX BUG#4 : register_vector() dans database.py
-  - FIX BUG#5 : num_gpu=-1 dans rag_engine.py
+  - FIX BUG#5 : num_gpu=99 (toutes les couches GPU) dans rag_engine.py
   - FIX BUG#6 : JWT_SECRET renommé API_TOKEN_SOURCE (pas de JWT émis)
 """
 
 import os
 import secrets
 from functools import lru_cache
-from pydantic_settings import BaseSettings
+
 from loguru import logger
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -53,14 +54,14 @@ class Settings(BaseSettings):
     # ── ROCm / AMD BC-250 ────────────────────────────────────────
     HSA_OVERRIDE_GFX_VERSION: str = "10.1.3"  # Cyan Skillfish → gfx1013
     # Budget LOGIQUE utilisé par l'appli (PYTORCH_HIP_ALLOC_CONF). Le vrai
-    # plafond kernel est plus large (amdgpu.gttsize=14750 + ttm.pages_limit=
-    # 3959290 + ttm.page_pool_size=3959290 dans GRUB, cf. install.sh étape
-    # 3/9) — la marge évite que le driver ne plante pile à la limite des
-    # 12 Go visés ici. Les 3 paramètres GRUB DOIVENT être posés ensemble ;
-    # gttsize seul ne suffit pas (le plafond ttm par défaut peut être atteint
-    # avant gttsize et planter le driver).
+    # plafond kernel est posé via ttm.pages_limit=3014656 (Bazzite :
+    # `rpm-ostree kargs --append-if-missing="ttm.pages_limit=3014656"`) +
+    # UMA_SIZE=512 Mo (CMOS bc250memcfg) → split serveur 12 Go GPU / 4 Go CPU
+    # (cf. install.sh étape 3/9 et vault/docs/superpowers/specs/
+    # 2026-08-26-bc250-bazzite-deployment.md). Le triplet
+    # gttsize=14750/pages_limit/page_pool_size=3959290 (~15 Go) est ÉVITÉ :
+    # il pomperait la RAM CPU sur un système unifié 16 Go.
     AMD_GTT_SIZE_MB:          int = 12288
-    AMD_ZEN2_CORES:           int = 6
     # 24 = stock (16 CUs fusionnés en firmware). Après déblocage 40 CU
     # (scripts/unlock-40cu.sh, cf. install.sh étape 9/9), passer à 40
     # dans .env — NE JAMAIS mettre 40 ici sans avoir vérifié au préalable
@@ -89,7 +90,11 @@ class Settings(BaseSettings):
 
     # ── Fine-tuning & Logging ────────────────────────────────────
     ENABLE_LOGGING:   bool  = True
-    AUTO_EVALUATE:    bool  = True
+    # NOTE : l'auto-scoring (LLM-juge) n'est PAS encore câblé dans v6.0.
+    # AUTO_EVALUATE=False => aucune note automatique n'est générée ; le
+    # marquage is_golden repose uniquement sur le feedback humain via POST
+    # /feedback. Le job d'auto-scoring est un développement futur (voir README §7).
+    AUTO_EVALUATE:    bool  = False
     GOLDEN_THRESHOLD: float = 0.85
 
 # ── Sécurité ─────────────────────────────────────────────────
@@ -104,8 +109,9 @@ class Settings(BaseSettings):
     # Doit être identique côté client (REACT_APP_API_TOKEN)
     # Par défaut : identique à API_TOKEN_SOURCE si non défini séparément
     API_TOKEN:    str = ""
-    # Toutes origines autorisées — usage LAN uniquement
-    CORS_ORIGINS: str = "*"
+    # Défaut restreint (localhost) — en prod, listez les origines exactes dans .env
+    # (ex: CORS_ORIGINS=http://localhost:3000,http://192.168.1.11:3000).
+    CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     # ── Chemins ──────────────────────────────────────────────────
     UPLOAD_DIR: str = "/app/data/uploads"
@@ -121,7 +127,7 @@ class Settings(BaseSettings):
     }
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     """
     Retourne les settings en singleton (lru_cache).

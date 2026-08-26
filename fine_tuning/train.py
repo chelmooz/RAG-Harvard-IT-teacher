@@ -1,13 +1,19 @@
 """
-Prof IA v6.0 — Fine-tuning QLoRA sur AMD BC-250 (ROCm 7.2)
-============================================================
-DIFFÉRENCES VS v4 (qui ciblait CUDA) :
-  1. BitsAndBytesConfig désactivé → quantification manuelle AWQ/GPTQ
-     (bitsandbytes CUDA ne fonctionne pas nativement sur ROCm BC-250)
-  2. fp16=True (non bf16) : Cyan Skillfish RDNA2 = fp16 natif
-  3. SFTTrainer (TRL) remplace Trainer : plus simple pour instruction tuning
-  4. gradient_checkpointing=True : réduit la pression sur les 12 Go VRAM
-  5. Sauvegarde directe asyncpg : récupère le golden dataset depuis PostgreSQL
+Prof IA v6.0 — Fine-tuning QLoRA 4-bit sur AMD BC-250 (ROCm 7.2)
+===============================================================
+Base = Qwen3-14B (même modèle que celui servi en prod par Ollama),
+quantifié en 4-bit (nf4) pour tenir dans les 12 Go VRAM BC-250
+(~8 Go en 4-bit au lieu de ~28 Go en fp16 plein).
+
+Spécificités BC-250 / ROCm :
+  1. HSA_OVERRIDE_GFX_VERSION=10.1.3 : Cyan Skillfish (gfx1013) absent de ROCm officiel.
+  2. QLoRA 4-bit via BitsAndBytesConfig (build ROCm de bitsandbytes).
+     Sur BC-250 STOCK (sans ROCm custom, cf. spec déploiement Phase 2) bitsandbytes
+     ROCm peut être indisponible → le fine-tuning nécessite alors la Phase 2.
+  3. fp16 compute dtype : RDNA2 = fp16 natif.
+  4. SFTTrainer (TRL) : plus simple pour instruction tuning.
+  5. gradient_checkpointing=True : réduit la pression VRAM.
+  6. Sauvegarde directe asyncpg : golden dataset depuis PostgreSQL.
 """
 
 import asyncio
@@ -26,7 +32,8 @@ import torch
 import yaml
 from datasets import Dataset
 from loguru import logger
-from peft import LoraConfig, get_peft_model
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+from transformers import BitsAndBytesConfig
 from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
 from trl import SFTTrainer
 
@@ -84,14 +91,21 @@ def format_for_sft(records: list[dict]) -> list[dict]:
 
 
 def _load_model_with_lora(base_model: str, config: dict):
-    logger.info(f"📦 Chargement modèle fp16 : {base_model}")
+    logger.info(f"📦 Chargement modèle QLoRA 4-bit : {base_model}")
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.float16,
+        bnb_4bit_use_double_quant=True,
+    )
     model = AutoModelForCausalLM.from_pretrained(
         base_model,
-        torch_dtype=torch.float16,
+        quantization_config=bnb_config,
         device_map="auto",
         trust_remote_code=True,
     )
     model.config.use_cache = False
+    model = prepare_model_for_kbit_training(model)
 
     lora_cfg = config["lora"]
     lora_config = LoraConfig(

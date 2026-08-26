@@ -17,10 +17,10 @@ OPTIMISATIONS BC-250 CONSERVÉES :
 
 import asyncio
 import os
-from typing import List, Dict, Any, Optional
+from typing import Any
 
-import httpx
 import asyncpg
+import httpx
 import numpy as np
 from loguru import logger
 
@@ -108,7 +108,7 @@ class EmbeddingEngine:
 
         logger.info("✅ EmbeddingEngine prêt")
 
-    def encode(self, texts: List[str]) -> np.ndarray:
+    def encode(self, texts: list[str]) -> np.ndarray:
         """
         Encode une liste de textes en vecteurs normalisés.
 
@@ -155,7 +155,7 @@ class RAGEngine:
 
         # FIX BUG#3 : _pool assigné depuis get_db() dans initialize(),
         # pas via create_pool() → un seul pool pour toute l'application
-        self._pool: Optional[asyncpg.Pool] = None
+        self._pool: asyncpg.Pool | None = None
         self.embedding_engine = EmbeddingEngine(embedding_model)
 
         # Timeout généreux pour Ollama sur BC-250 (CPU+GPU GDDR6 partagé)
@@ -190,7 +190,7 @@ class RAGEngine:
     # ── Retrieval ──────────────────────────────────────────────────────────────
 
     def _build_retrieve_sql(
-        self, query_vec, top_k: int, threshold: float, metier_filter: Optional[str]
+        self, query_vec, top_k: int, threshold: float, metier_filter: str | None
     ) -> tuple[str, list]:
         vec = query_vec.tolist()
         limit = top_k * 2
@@ -224,8 +224,8 @@ class RAGEngine:
         query: str,
         top_k: int = 5,
         threshold: float = 0.72,   # Aligné sur config.py RAG_THRESHOLD
-        metier_filter: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        metier_filter: str | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Recherche les chunks les plus proches via pgvector HNSW.
 
@@ -282,13 +282,13 @@ class RAGEngine:
 
     @staticmethod
     def _build_index_records(
-        chunks: List[Dict[str, Any]],
+        chunks: list[dict[str, Any]],
         embeddings: np.ndarray,
         file_id: str,
         filename: str,
     ) -> list[tuple]:
         records = []
-        for i, (chunk, emb) in enumerate(zip(chunks, embeddings)):
+        for i, (chunk, emb) in enumerate(zip(chunks, embeddings, strict=True)):
             meta = {
                 "source": filename,
                 "chunking_method": chunk.get("metadata", {}).get(
@@ -308,7 +308,7 @@ class RAGEngine:
 
     async def index_chunks(
         self,
-        chunks: List[Dict[str, Any]],
+        chunks: list[dict[str, Any]],
         file_id: str,
         filename: str,
     ):
@@ -366,7 +366,7 @@ class RAGEngine:
         )
 
     @staticmethod
-    def _build_full_prompt(query: str, context: Optional[str] = None) -> str:
+    def _build_full_prompt(query: str, context: str | None = None) -> str:
         if context:
             return (
                 f"Contexte (sources documentaires) :\n{context}\n\n"
@@ -409,7 +409,7 @@ class RAGEngine:
     async def generate(
         self,
         query: str,
-        context: Optional[str] = None,
+        context: str | None = None,
         system_prompt: str = "",
     ) -> str:
         safe_system = self._build_system_prompt(system_prompt)
@@ -418,7 +418,7 @@ class RAGEngine:
 
     # ── Stats & Maintenance ────────────────────────────────────────────────────
 
-    async def get_collection_stats(self) -> Dict[str, Any]:
+    async def get_collection_stats(self) -> dict[str, Any]:
         async with self._pool.acquire() as conn:
             total = await conn.fetchval("SELECT COUNT(*) FROM rag_chunks;")
             files = await conn.fetchval(
@@ -450,10 +450,6 @@ class RAGEngine:
     async def check_db_health(self):
         async with self._pool.acquire() as conn:
             await conn.fetchval("SELECT 1;")
-
-    async def check_chroma_health(self):
-        """Alias de compatibilité — ChromaDB supprimé en v5, remplacé par pgvector."""
-        await self.check_db_health()
 
     # ── Fermeture ──────────────────────────────────────────────────────────────
 

@@ -16,11 +16,16 @@ OPTIMISATIONS CONSERVÉES :
 
 import asyncio
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Any
+
+import openpyxl
+from docx import Document as DocxDocument
 from loguru import logger
+from pptx import Presentation
 
 # ── Settings ──────────────────────────────────────────────────────────────────
 from .config import get_settings
+
 settings = get_settings()
 
 # ── Extraction documents ───────────────────────────────────────────────────────
@@ -28,12 +33,8 @@ settings = get_settings()
 try:
     from pypdf import PdfReader
 except ImportError:
-    import PyPDF2 as _pypdf2
-    PdfReader = _pypdf2.PdfReader  # fallback si pypdf non installé
-
-from docx import Document as DocxDocument
-from pptx import Presentation
-import openpyxl
+    import PyPDF2
+    PdfReader = PyPDF2.PdfReader  # fallback si pypdf non installé
 
 # ── Chunking ───────────────────────────────────────────────────────────────────
 # Essai langchain_text_splitters (package dédié) puis fallback langchain complet
@@ -74,7 +75,7 @@ class DocumentProcessor:
         # FIX W9 : singleton Whisper — chargé une seule fois, conservé en mémoire
         # Évite ~3s de rechargement + fluctuations VRAM à chaque fichier audio
         self._whisper_model = None
-        self._whisper_device: Optional[str] = None
+        self._whisper_device: str | None = None
 
     # ── Sauvegarde fichier ─────────────────────────────────────────────────────
 
@@ -93,11 +94,11 @@ class DocumentProcessor:
 
         # file_id est toujours un UUID (généré par l'appelant) → pas de path traversal
         file_path = self.upload_dir / f"{file_id}{ext}"
-        CHUNK = 8 * 1024 * 1024  # 8 Mo
+        chunk_size = 8 * 1024 * 1024  # 8 Mo
 
         with open(file_path, "wb") as f:
             while True:
-                data = await file.read(CHUNK)
+                data = await file.read(chunk_size)
                 if not data:
                     break
                 f.write(data)
@@ -110,7 +111,7 @@ class DocumentProcessor:
 
     async def process_document(
         self, file_path: str, filename: str
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Pipeline complet : extraction + chunking.
 
@@ -159,7 +160,7 @@ class DocumentProcessor:
 
     def _extract_text(self, file_path: str) -> str:
         try:
-            with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            with open(file_path, encoding="utf-8", errors="replace") as f:
                 return f.read()
         except Exception as e:
             logger.error(f"❌ Extraction texte : {e}")
@@ -209,8 +210,8 @@ class DocumentProcessor:
         FIX W8 : device via torch.cuda.is_available() (robuste) et non
         la variable HSA_OVERRIDE_GFX_VERSION qui peut être définie sans GPU réel.
         """
-        import whisper
         import torch as _torch
+        import whisper
 
         # FIX W8 : même logique que _get_device() dans rag_engine.py
         current_device = "cuda" if _torch.cuda.is_available() else "cpu"
@@ -231,7 +232,7 @@ class DocumentProcessor:
         Transcription audio/vidéo via Whisper base (145 Mo).
 
         OPTIMISATION BC-250 :
-        - Modèle "base" : tient dans 12 Go VRAM avec Mistral Q4 chargé.
+        - Modèle "base" : tient dans 12 Go VRAM avec Qwen3-14B Q4 chargé.
         - fp16 uniquement si CUDA disponible (évite les erreurs CPU fp16).
         - FIX W9 : singleton — le modèle est conservé entre les appels.
         """
@@ -271,7 +272,7 @@ class DocumentProcessor:
         text: str,
         source: str,
         file_type: str,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Découpe le texte avec RecursiveCharacterTextSplitter.
 
@@ -323,7 +324,7 @@ class DocumentProcessor:
         self,
         directory: str,
         rag_engine,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Indexe tous les fichiers d'un répertoire EN PARALLÈLE.
 

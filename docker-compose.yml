@@ -16,6 +16,16 @@ services:
     image: pgvector/pgvector:pg18
     container_name: prof-ia-postgres-v6.0
     restart: unless-stopped
+    # Limites mémoire/CPU : BC-250 = 16 Go GDDR6 UNIFIÉS (RAM+VRAM partagés).
+    # À ajuster selon le profil (JEU vs RAG) ; valeurs conservatrices ci-dessous.
+    deploy:
+      resources:
+        limits:
+          memory: 3g
+          cpus: "1.5"
+        reservations:
+          memory: 2g
+          cpus: "1"
     environment:
       POSTGRES_DB:              prof_ia_v5
       POSTGRES_USER:            user
@@ -60,9 +70,20 @@ services:
   # Les embeddings (SentenceTransformer, backend/api/rag_engine.py) restent
   # inchangés : ROCm si dispo, sinon repli CPU — voir DEVICE dans rag_engine.py.
   ollama:
-    image: ollama/ollama:latest
+    # Pinned (non :latest) pour reproductibilité — ajuster vers la version déployée.
+    image: ollama/ollama:0.32.15
     container_name: prof-ia-ollama-vulkan
     restart: unless-stopped
+    # Le modèle (qwen3:14b ~9,3 Go) vit en VRAM GPU ; le conteneur ne consomme
+    # que le contexte + métadonnées en RAM CPU. Limite conservative.
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+          cpus: "3"
+        reservations:
+          memory: 2g
+          cpus: "1.5"
     devices:
       - /dev/dri:/dev/dri            # accès Vulkan (RADV) — pas besoin de /dev/kfd (ROCm)
     group_add:
@@ -80,7 +101,9 @@ services:
     ports:
       # Loopback uniquement — Ollama n'a pas d'authentification propre.
       # Le backend y accède via le réseau Docker interne (http://ollama:11434).
+      # :11436 (hôte) = endpoint du vault / outils LAN ; même instance que :11434.
       - "127.0.0.1:11434:11434"
+      - "127.0.0.1:11436:11434"
     networks:
       - prof-ia-network
     healthcheck:
@@ -99,6 +122,16 @@ services:
         USE_ROCM: "true"
     container_name: prof-ia-backend-v6.0
     restart: unless-stopped
+    # Embeddings (bge-m3) + API : peuvent utiliser GPU (ROCm tenté) ou CPU.
+    # 5 Go RAM laisse de la marge pour le contexte tout en protégeant le host.
+    deploy:
+      resources:
+        limits:
+          memory: 5g
+          cpus: "3"
+        reservations:
+          memory: 3g
+          cpus: "1.5"
     devices:
       - /dev/kfd:/dev/kfd
       - /dev/dri:/dev/dri
@@ -108,7 +141,7 @@ services:
     environment:
       DATABASE_URL:             postgresql://user:${POSTGRES_PASSWORD:?"POSTGRES_PASSWORD manquant dans .env"}@postgres:5432/prof_ia_v5
       OLLAMA_HOST:              http://ollama:11434
-      OLLAMA_MODEL:             ${OLLAMA_MODEL:-mistral:7b-instruct-q4_K_M}
+      OLLAMA_MODEL:             ${OLLAMA_MODEL:-qwen3:14b}
       HSA_OVERRIDE_GFX_VERSION: "10.1.3"
       ROCR_VISIBLE_DEVICES:     "0"
       PYTORCH_HIP_ALLOC_CONF:   "max_split_size_mb:512"
@@ -162,6 +195,14 @@ services:
       dockerfile: Dockerfile
     container_name: prof-ia-frontend-v6.0
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "0.5"
+        reservations:
+          memory: 512m
+          cpus: "0.25"
     environment:
       - REACT_APP_API_URL=http://localhost:8001
       - REACT_APP_VERSION=6.0.0
@@ -184,6 +225,14 @@ services:
     image: nginx:alpine
     container_name: prof-ia-nginx-v6.0
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.5"
+        reservations:
+          memory: 128m
+          cpus: "0.25"
     ports:
       - "0.0.0.0:8080:80"
     volumes:

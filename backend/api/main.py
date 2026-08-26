@@ -18,22 +18,28 @@ Architecture des endpoints :
 """
 
 import asyncio
+import secrets
 import time
 import uuid
-import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import List, Optional
 
-from fastapi import FastAPI, File, HTTPException, UploadFile, Depends, Request
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from .config import get_settings
-from .database import init_db, close_db, get_db
-from .rag_engine import RAGEngine
+from .database import close_db, get_db, init_db, save_feedback
 from .document_processor import DocumentProcessor
-from .schemas import ChatRequest, ChatResponse, HealthResponse, ConversationRecord
+from .rag_engine import RAGEngine
+from .schemas import (
+    ChatRequest,
+    ChatResponse,
+    ConversationRecord,
+    FeedbackRequest,
+    FeedbackResponse,
+    HealthResponse,
+)
 
 settings = get_settings()
 
@@ -57,8 +63,10 @@ async def verify_api_token(request: Request):
 
 
 # ── Instances globales ─────────────────────────────────────────────────────────
-_rag_engine: Optional[RAGEngine] = None
-_doc_processor: Optional[DocumentProcessor] = None
+_rag_engine: RAGEngine | None = None
+_doc_processor: DocumentProcessor | None = None
+
+_bg_tasks: set = set()
 
 
 def get_rag_engine() -> RAGEngine:
@@ -85,8 +93,8 @@ async def lifespan(app: FastAPI):
 
     logger.info("🚀 Démarrage Prof IA v6.0 (AMD BC-250)...")
 
-    # FIX BUG#4 : init_db() appelle maintenant register_vector(pool)
-    # Le codec pgvector est enregistré avant toute requête vectorielle.
+    # FIX BUG#4 : le codec pgvector (+ jsonb) est enregistré par le callback
+    # init=_init_connection de create_pool (voir database.py) — une fois par connexion.
     await init_db()
     logger.info("✅ Base de données initialisée (pgvector enregistré)")
 
@@ -193,7 +201,7 @@ async def health_check(
 # CHAT / RAG
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _build_context(chunks: List[dict]) -> tuple[bool, Optional[str]]:
+def _build_context(chunks: list[dict]) -> tuple[bool, str | None]:
     """Construit le contexte RAG à partir des chunks récupérés."""
     if not chunks:
         return False, None
@@ -204,7 +212,7 @@ def _build_context(chunks: List[dict]) -> tuple[bool, Optional[str]]:
     return True, "\n\n---\n\n".join(parts)
 
 
-def _build_sources(chunks: List[dict]) -> List[dict]:
+def _build_sources(chunks: list[dict]) -> list[dict]:
     """Prépare la liste des sources pour la réponse."""
     return [{
         "rank": c["rank"],
@@ -222,13 +230,13 @@ async def _persist_conversation(record: ConversationRecord):
             await conn.execute(
                 """
                 INSERT INTO conversations (
-                    session_id, user_query, model_response,
+                    id, session_id, user_query, model_response,
                     rag_context, rag_sources, rag_used,
                     chunks_used, rag_threshold, response_time_ms,
                     model_name, metier
-                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
                 """,
-                record.session_id, record.query, record.response, record.context,
+                record.id, record.session_id, record.query, record.response, record.context,
                 [{"text": c["text"], "score": c["score"],
                   "source": c["metadata"].get("source")} for c in record.chunks],
                 record.rag_used, len(record.chunks), record.threshold, record.elapsed_ms,
@@ -253,6 +261,7 @@ async def chat(
     """
     t_start = time.monotonic()
     session_id = request.session_id or str(uuid.uuid4())
+    conversation_id = str(uuid.uuid4())
     top_k = request.top_k or settings.RAG_TOP_K
     threshold = request.threshold or settings.RAG_THRESHOLD
 
@@ -266,8 +275,9 @@ async def chat(
     )
     elapsed_ms = int((time.monotonic() - t_start) * 1000)
 
-    asyncio.create_task(_persist_conversation(
+    _task = asyncio.create_task(_persist_conversation(
         ConversationRecord(
+            id=conversation_id,
             session_id=session_id,
             query=request.query,
             response=response_text,
@@ -280,6 +290,8 @@ async def chat(
             model_name=settings.OLLAMA_MODEL,
         )
     ))
+    _bg_tasks.add(_task)
+    _task.add_done_callback(_bg_tasks.discard)
 
     return ChatResponse(
         response=response_text,
@@ -288,13 +300,44 @@ async def chat(
         rag_used=rag_used,
         chunks_retrieved=len(chunks),
         response_time_ms=elapsed_ms,
+        conversation_id=conversation_id,
+    )
+
+
+@app.post("/feedback", response_model=FeedbackResponse, tags=["Feedback"])
+async def submit_feedback(
+    payload: FeedbackRequest,
+    _=Depends(verify_api_token),
+):
+    """
+    Feedback humain sur une réponse (boucle d'amélioration humain-dans-la-boucle).
+
+    Reçoit l'ID de conversation renvoyé par /chat et l'enregistre dans
+    response_evaluations. Les réponses marquées is_golden=true alimentent
+    ensuite fine_tuning/train.py (export SFT JSONL).
+    """
+    if payload.human_rating is not None and not (1 <= payload.human_rating <= 5):
+        raise HTTPException(status_code=400, detail="human_rating doit être entre 1 et 5")
+    pool = await get_db()
+    async with pool.acquire() as conn:
+        await save_feedback(
+            conn,
+            payload.conversation_id,
+            payload.human_rating,
+            payload.human_feedback,
+            payload.is_golden,
+        )
+    return FeedbackResponse(
+        status="ok",
+        conversation_id=payload.conversation_id,
+        is_golden=payload.is_golden,
     )
 
 
 @app.get("/chat/history", tags=["Chat"])
 async def get_history(
-    session_id: Optional[str] = None,
-    metier: Optional[str] = None,
+    session_id: str | None = None,
+    metier: str | None = None,
     limit: int = 20,
     _=Depends(verify_api_token),
 ):
@@ -337,7 +380,7 @@ async def get_history(
 @app.post("/documents/upload", tags=["Documents"])
 async def upload_document(
     file: UploadFile = File(...),
-    metier: Optional[str] = None,
+    metier: str | None = None,
     rag: RAGEngine = Depends(get_rag_engine),
     proc: DocumentProcessor = Depends(get_doc_processor),
     _=Depends(verify_api_token),
@@ -357,7 +400,7 @@ async def upload_document(
     try:
         file_path = await proc.save_file(file, file_id)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     try:
         chunks = await proc.process_document(file_path, file.filename)
@@ -371,7 +414,7 @@ async def upload_document(
 
     except Exception as e:
         logger.error(f"❌ Erreur indexation {file.filename} : {e}")
-        raise HTTPException(status_code=500, detail=f"Erreur d'indexation : {e}")
+        raise HTTPException(status_code=500, detail=f"Erreur d'indexation : {e}") from e
 
     return {
         "file_id": file_id,
@@ -409,10 +452,11 @@ async def delete_document(
     """Supprime un document et tous ses chunks de la base vectorielle."""
     pool = await get_db()
     async with pool.acquire() as conn:
-        deleted = await conn.fetchval(
-            "DELETE FROM rag_chunks WHERE file_id = $1 RETURNING COUNT(*)",
-            file_id
+        rows = await conn.fetch(
+            "DELETE FROM rag_chunks WHERE file_id = $1 RETURNING id",
+            file_id,
         )
+        deleted = len(rows)
         # Suppression du fichier physique si présent
         upload_path = Path(settings.UPLOAD_DIR)
         for ext in (".pdf", ".txt", ".md", ".docx", ".pptx", ".xlsx",
@@ -452,7 +496,7 @@ async def index_directory(
     try:
         stats = await proc.index_directory(directory, rag)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     return stats
 
 

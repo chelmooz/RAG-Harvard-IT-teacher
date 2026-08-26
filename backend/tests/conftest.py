@@ -2,7 +2,6 @@
 import pytest
 import pytest_asyncio
 
-
 # ── Fixtures partagées ────────────────────────────────────────────────────────
 
 @pytest.fixture(scope="session")

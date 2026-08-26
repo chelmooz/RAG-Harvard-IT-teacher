@@ -1,0 +1,6 @@
+# Obsidian config + plugin cache (regenerated locally per machine)
+.obsidian/
+
+# OS / editor junk
+.DS_Store
+Thumbs.db

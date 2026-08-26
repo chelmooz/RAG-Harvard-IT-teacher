@@ -3,19 +3,10 @@ Tests unitaires — Prof IA v6.0
 ==============================
 Tests de logique pure sans dépendances GPU/DB (mocks).
 """
-import pytest
-from unittest.mock import patch
 from pathlib import Path
+from unittest.mock import patch
 
-
-# ── Fixtures ROCm (forcé CPU pour les tests) ────────────────────────────────
-@pytest.fixture(autouse=True)
-def force_cpu_device(monkeypatch):
-    """Désactive le GPU pour les tests unitaires."""
-    monkeypatch.setenv("HSA_OVERRIDE_GFX_VERSION", "10.1.3")
-    with patch("torch.cuda.is_available", return_value=False):
-        yield
-
+import pytest
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TESTS UNITAIRES — Logique pure (sans DB ni GPU)

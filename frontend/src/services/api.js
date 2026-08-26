@@ -163,7 +163,8 @@ export const indexingService = {
    * @returns {Promise<Object>}
    */
   async indexDirectory(directory) {
-    const response = await api.post('/indexing/directory', { directory });
+    // Le back attend `directory` en query param (POST /indexing/directory?directory=...)
+    const response = await api.post('/indexing/directory', null, { params: { directory } });
     return response.data;
   },
 

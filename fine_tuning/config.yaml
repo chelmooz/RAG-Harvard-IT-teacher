@@ -11,11 +11,13 @@ database:
   url: "${FINE_TUNING_DB_URL}"
 
 model:
-  # Modèle de base à fine-tuner (Mistral 7B en fp16 ≈ 14 Go VRAM)
+  # Modèle de base à fine-tuner : doit MATCHER le modèle servi (qwen3:14b).
+  # Qwen3-14B en QLoRA 4-bit ≈ 8 Go VRAM → tient dans les 12 Go BC-250.
+  # (fp16 plein precision ≈ 28 Go ne tient PAS ; d'où le 4-bit obligatoire)
   # IMPORTANT : arrêter Ollama avant de lancer le fine-tuning !
-  base_model: "mistralai/Mistral-7B-Instruct-v0.2"
+  base_model: "Qwen/Qwen3-14B"
   # Répertoire de sortie du modèle LoRA adapté
-  output_dir: "/app/models/mistral-prof-ia-lora"
+  output_dir: "/app/models/qwen3-prof-ia-lora"
 
 dataset:
   # Nombre max d'exemples Golden à récupérer depuis PostgreSQL
@@ -29,18 +31,21 @@ lora:
   # Augmenter à 32 si le dataset > 300 exemples et VRAM suffisante
   r: 16
   alpha: 32
-  # Modules cibles pour Mistral 7B (architecture transformer)
+  # Modules cibles pour Qwen3 (architecture transformer)
   target_modules:
     - "q_proj"
-    - "v_proj"
     - "k_proj"
+    - "v_proj"
     - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
   dropout: 0.05
 
 training:
-  output_dir: "/app/models/mistral-prof-ia-lora"
+  output_dir: "/app/models/qwen3-prof-ia-lora"
   num_epochs: 3
-  # batch_size=1 obligatoire avec 12 Go VRAM (fp16 Mistral 7B ≈ 14 Go brut)
+  # batch_size=1 obligatoire avec 12 Go VRAM (LoRA fp16 sur Qwen3-14B)
   # gradient_accumulation_steps=8 simule un batch effectif de 8
   batch_size: 1
   gradient_accumulation_steps: 8

@@ -6,11 +6,12 @@ Tests avec PostgreSQL réel (nécessite docker-compose up postgres).
 Lancer :
   pytest backend/tests/test_integration.py -v -m integration
 """
-import os
 import asyncio
+import json
+import os
+
 import pytest
 import pytest_asyncio
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TESTS D'INTÉGRATION — Nécessite PostgreSQL (docker-compose up postgres)
@@ -30,16 +31,35 @@ def db_url():
 def base_url():
     """Base URL for API calls (configurable via env)."""
     return os.getenv("TEST_API_BASE_URL", "http://localhost:8001")
-    """Token API pour les tests E2E."""
+
+
+@pytest.fixture
+def api_token():
+    """Token API pour les tests E2E (configurable via env)."""
     return os.getenv("TEST_API_TOKEN", "test-token")
 
 
 @pytest_asyncio.fixture
 async def pool(db_url):
-    """Crée un pool de test vers PostgreSQL de test."""
+    """Crée un pool de test vers PostgreSQL de test (codecs enregistrés)."""
     import asyncpg
     try:
-        pool = await asyncpg.create_pool(db_url, min_size=1, max_size=2, command_timeout=10)
+        from pgvector.asyncpg import register_vector
+    except ImportError:
+        register_vector = None
+
+    async def _init(conn):
+        if register_vector is not None:
+            await register_vector(conn)
+        await conn.set_type_codec(
+            "jsonb", schema="pg_catalog",
+            encoder=json.dumps, decoder=json.loads, format="text",
+        )
+
+    try:
+        pool = await asyncpg.create_pool(
+            db_url, min_size=1, max_size=2, command_timeout=10, init=_init
+        )
         yield pool
         await pool.close()
     except Exception as e:
@@ -206,4 +226,4 @@ class TestEndToEnd:
 
             # 4. Cleanup
             if file_id:
-                await client.delete(f"{BASE_URL}/documents/{file_id}", headers=headers)
+                await client.delete(f"{base_url}/documents/{file_id}", headers=headers)

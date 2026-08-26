@@ -19,15 +19,18 @@ POURQUOI asyncpg plutôt que SQLAlchemy ?
 """
 
 import asyncio
+import json
+
 import asyncpg
-from typing import Optional
 from loguru import logger
+
 from .config import get_settings
 
 # FIX BUG#4 : import du codec pgvector pour asyncpg.
-# register_vector() DOIT être appelé sur le pool AVANT toute requête vectorielle.
-# Sans cet enregistrement, asyncpg ne sait pas sérialiser/désérialiser le type
-# PostgreSQL 'vector' et lève DataError ou 'cannot adapt type list'.
+# register_vector() est appelé PAR CONNEXION via le callback init= de create_pool
+# (voir _init_connection). asyncpg n'enregistre PAS non plus le codec JSONB tout
+# seul : _init_connection enregistre aussi jsonb (encoder/decoder) pour éviter les
+# DataError sur les colonnes metadata / rag_sources (JSONB).
 try:
     from pgvector.asyncpg import register_vector
 except ImportError:
@@ -36,8 +39,27 @@ except ImportError:
 
 settings = get_settings()
 
-_pool: Optional[asyncpg.Pool] = None
+_pool: asyncpg.Pool | None = None
 _init_lock = asyncio.Lock()   # FIX W13 : évite les doubles initialisations concurrentes
+
+
+async def _init_connection(conn: asyncpg.Connection) -> None:
+    """Callback d'init du pool (appelée par connexion physique).
+
+    FIX P0-1 + P0-2 : register_vector doit être appelé SUR LA CONNEXION (pas sur
+    le pool), et asyncpg n'enregistre PAS automatiquement le codec JSONB — sans
+    lui, l'insertion/lecture de métadonnées JSONB échoue (DataError, ou str au
+    lieu de dict). On enregistre les deux ici, une fois pour toutes.
+    """
+    if register_vector is not None:
+        await register_vector(conn)
+        logger.info("✅ Codec pgvector enregistré sur la connexion")
+    else:
+        logger.error("❌ register_vector indisponible — les requêtes vectorielles échoueront")
+    await conn.set_type_codec(
+        "jsonb", schema="pg_catalog",
+        encoder=json.dumps, decoder=json.loads, format="text",
+    )
 
 
 async def _create_pool() -> asyncpg.Pool:
@@ -47,15 +69,8 @@ async def _create_pool() -> asyncpg.Pool:
         max_size=10,
         command_timeout=60,
         statement_cache_size=200,
+        init=_init_connection,
     )
-
-
-async def _register_pgvector(pool: asyncpg.Pool) -> None:
-    if register_vector is not None:
-        await register_vector(pool)
-        logger.info("✅ Codec pgvector enregistré sur le pool asyncpg")
-    else:
-        logger.error("❌ register_vector indisponible — les requêtes vectorielles échoueront")
 
 
 async def _create_extensions(conn: asyncpg.Connection) -> None:
@@ -218,7 +233,6 @@ async def init_db() -> asyncpg.Pool:
     global _pool
 
     _pool = await _create_pool()
-    await _register_pgvector(_pool)
 
     async with _pool.acquire() as conn:
         await _create_extensions(conn)
@@ -256,3 +270,33 @@ async def close_db():
         await _pool.close()
         _pool = None
         logger.info("✅ Pool PostgreSQL fermé")
+
+
+async def save_feedback(
+    conn: asyncpg.Connection,
+    conversation_id: str,
+    human_rating: int | None,
+    human_feedback: str | None,
+    is_golden: bool,
+) -> None:
+    """
+    Enregistre (ou met à jour) le feedback humain d'une conversation.
+
+    Ferme la boucle humain-dans-la-boucle : les réponses jugées exemplaires
+    (is_golden=true) alimentent response_evaluations, d'où fine_tuning/train.py
+    exporte ensuite le jeu SFT. ON CONFLICT gère le cas d'un feedback multiple
+    sur la même conversation (UNIQUE(conversation_id)).
+    """
+    await conn.execute(
+        """
+        INSERT INTO response_evaluations
+            (conversation_id, human_rating, human_feedback, is_golden)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (conversation_id) DO UPDATE SET
+            human_rating   = EXCLUDED.human_rating,
+            human_feedback = EXCLUDED.human_feedback,
+            is_golden      = EXCLUDED.is_golden,
+            evaluated_at   = NOW()
+        """,
+        conversation_id, human_rating, human_feedback, is_golden,
+    )

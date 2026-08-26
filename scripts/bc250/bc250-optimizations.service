@@ -1,0 +1,19 @@
+[Unit]
+Description=BC-250 Phase 1 optimizations (40 CU / 8c / UV-OC)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# apply_phase1.sh lance un health-check en fin ; il sort en erreur si les
+# optimisations ne sont pas effectives → Restart=on-failure retente.
+ExecStart=/opt/bc250/apply_phase1.sh
+Restart=on-failure
+RestartSec=15
+# Ne pas bootloop si le matériel refuse (silicon / VRM) : 3 essais / 2 min.
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+[Install]
+WantedBy=multi-user.target

@@ -2,6 +2,10 @@
 # =============================================================================
 # Prof IA v6.0 — Script d'installation AMD BC-250 (Cyan Skillfish / RDNA2)
 # OS : Debian 13.3 (Trixie) | Kernel 6.18.10 | Mesa 26.0 | ROCm 7.2
+# -----------------------------------------------------------------------------
+# ⚠️  Ce script cible DEBIAN 13 / ROCm. Pour Bazzite (Fedora immuable,
+#     rpm-ostree) — l'OS « first-class » recommandé dans le README §8.1 —
+#     utilisez à la place : scripts/bazzite/setup.sh
 # =============================================================================
 set -euo pipefail
 
@@ -50,28 +54,27 @@ info "3/9 Vérification des paramètres VRAM (GTT unifiée)..."
 GRUB_FILE="/etc/default/grub"
 CURRENT_CMD=$(grep "^GRUB_CMDLINE_LINUX_DEFAULT" "$GRUB_FILE" || echo "")
 
-# Valeurs documentées (elektricm.github.io/amd-bc250-docs/linux/kernel/) —
-# triplet testé par la communauté pour un accès GPU max (~14.5-14.75 Go).
-# AMD_GTT_SIZE_MB=12288 (app, config.py) reste le budget LOGIQUE utilisé par
-# PYTORCH_HIP_ALLOC_CONF ; ce plafond kernel plus large laisse de la marge
-# pour éviter que le driver ne plante pile à la limite.
-GTT_KERNEL_PARAMS="amdgpu.gttsize=14750 ttm.pages_limit=3959290 ttm.page_pool_size=3959290"
+# Split RAM/VRAM serveur (12 Go GPU / 4 Go CPU) validé par la communauté
+# (keyboardspecialist/bc250-steamos, bc250-ram-split) : UMA_SIZE=512 Mo (CMOS)
+# + ttm.pages_limit=3014656 (~11,5 Go dynamiques). Le triplet gttsize=14750/
+# pages_limit/page_pool_size=3959290 (~15 Go) est ÉVITÉ : il pomperait la RAM
+# CPU (Postgres/Ollama host) sur un système unifié 16 Go.
+# Sur Bazzite, poser via : rpm-ostree kargs --append-if-missing="ttm.pages_limit=3014656"
+GTT_KERNEL_PARAMS="ttm.pages_limit=3014656"
 
 MISSING_PARAMS=()
-echo "$CURRENT_CMD" | grep -q "gttsize"          || MISSING_PARAMS+=("amdgpu.gttsize")
 echo "$CURRENT_CMD" | grep -q "ttm.pages_limit"   || MISSING_PARAMS+=("ttm.pages_limit")
-echo "$CURRENT_CMD" | grep -q "ttm.page_pool_size" || MISSING_PARAMS+=("ttm.page_pool_size")
 
 if echo "$CURRENT_CMD" | grep -q "amd_iommu=on"; then
     error "amd_iommu=on détecté dans GRUB — IOMMU est CASSÉ sur BC-250 (crashs, écran noir). Retirez-le avant de continuer."
 fi
 
 if [[ ${#MISSING_PARAMS[@]} -eq 0 ]]; then
-    info "✅ gttsize + ttm.pages_limit + ttm.page_pool_size déjà tous configurés"
+    info "✅ ttm.pages_limit déjà configuré"
 else
     warn "Paramètre(s) manquant(s) dans GRUB : ${MISSING_PARAMS[*]}"
-    warn "Sans ttm.pages_limit/ttm.page_pool_size en plus de gttsize, le plafond VRAM"
-    warn "par défaut peut être dépassé et faire planter le driver avant les 12 Go visés."
+    warn "Sans ttm.pages_limit, le plafond VRAM par défaut peut être dépassé et faire"
+    warn "planter le driver avant les 12 Go visés (split serveur 12 Go GPU / 4 Go CPU)."
     echo ""
     read -rp "Ajouter automatiquement '$GTT_KERNEL_PARAMS' à GRUB maintenant ? [o/N] " ADD_GTT
     if [[ "$ADD_GTT" =~ ^[oOyY]$ ]]; then
@@ -215,4 +218,4 @@ info "  PYTORCH_HIP_ALLOC_CONF=$PYTORCH_HIP_ALLOC_CONF"
 echo ""
 warn "Si le GPU n'est pas détecté, vérifiez :"
 warn "  1. sudo usermod -aG video,render \$USER && newgrp render"
-warn "  2. Reboot avec amdgpu.gttsize=14750 ttm.pages_limit=3959290 ttm.page_pool_size=3959290 dans GRUB"
+warn "  2. Reboot avec ttm.pages_limit=3014656 dans GRUB (UMA_SIZE=512 Mo via bc250memcfg)"
