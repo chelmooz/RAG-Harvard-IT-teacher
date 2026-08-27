@@ -150,7 +150,7 @@ services:
       CHUNK_SIZE:               "400"
       CHUNK_OVERLAP:            "80"
       ENABLE_LOGGING:           "true"
-      AUTO_EVALUATE:            "true"
+      AUTO_EVALUATE:            "false"
       GOLDEN_THRESHOLD:         "0.85"
       # FIX : config.py utilise API_TOKEN_SOURCE/API_TOKEN depuis le renommage
       # de JWT_SECRET — l'ancienne variable était ignorée silencieusement

@@ -69,7 +69,7 @@ pandas==2.2.2
 peft==0.14.0
 datasets==2.21.0
 trl==0.11.1              # SFTTrainer — vérifier compatibilité dataset_text_field
-pyyaml==6.0.2            # Requis par fine_tuning/train.py (load_config)
+pyyaml==6.0.2            # Requis par experimental/fine_tuning/train.py (load_config)
 
 # ── HuggingFace ───────────────────────────────────────────────────────────────
 huggingface-hub>=1.5.0,<2.0.0
@@ -92,6 +92,6 @@ pytest-timeout==2.3.1
 # CORRECTIFS v6.0 :
 #   numpy==1.26.4  → numpy>=1.26,<3 (compatible numpy 2.x)
 #   httpx doublon  → supprimé (une seule entrée)
-#   pyyaml         → ajouté (manquait pour fine_tuning/train.py)
+#   pyyaml         → ajouté (manquait pour experimental/fine_tuning/train.py)
 #   PyPDF2         → pypdf (successeur officiel)
 # =============================================================================

@@ -94,7 +94,6 @@ async def _create_conversations_table(conn: asyncpg.Connection) -> None:
             response_time_ms INTEGER,
             model_name       VARCHAR(100) DEFAULT 'qwen3:14b',
             metier           VARCHAR(50),
-            user_metadata    JSONB,
             CONSTRAINT valid_metier
                 CHECK (metier IN ('TSSR', 'AIS', 'DevOps') OR metier IS NULL)
         );
@@ -119,25 +118,33 @@ async def _create_evaluations_table(conn: asyncpg.Connection) -> None:
 
 
 async def _create_issues_table(conn: asyncpg.Connection) -> None:
-    await conn.execute("""
+    """
+    MT-00.04 — Recrée response_issues (supprimée en PR 4).
+
+    Stocke les défauts détectés par le Juge / Avocat du diable.
+    evaluation_run_id + contrainte UNIQUE (conversation_id, evaluation_run_id,
+    issue_type, claim_hash) garantissent l'idempotence (MT-02.06) : deux passes
+    d'évaluation identiques ne créent qu'une seule ligne par claim.
+    """
+    await conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS response_issues (
-            id               SERIAL PRIMARY KEY,
-            conversation_id  UUID REFERENCES conversations(id) ON DELETE CASCADE,
-            issue_type       VARCHAR(50) NOT NULL,
-            detected_at      TIMESTAMPTZ DEFAULT NOW(),
-            description      TEXT,
-            resolved         BOOLEAN DEFAULT false,
-            resolved_at      TIMESTAMPTZ,
-            resolution_notes TEXT,
-            CONSTRAINT valid_issue_type CHECK (
-                issue_type IN (
-                    'hallucination', 'incomplete', 'off-topic',
-                    'low_relevance', 'no_citations',
-                    'hallucination_markers', 'other'
-                )
-            )
+            id                BIGSERIAL PRIMARY KEY,
+            conversation_id   UUID REFERENCES conversations(id) ON DELETE CASCADE,
+            evaluation_run_id UUID NOT NULL DEFAULT uuid_generate_v4(),
+            issue_type        VARCHAR(50) NOT NULL
+                              CHECK (issue_type IN (
+                                  'hallucination', 'incomplete', 'off-topic',
+                                  'low_relevance', 'no_citations',
+                                  'hallucination_markers', 'other'
+                              )),
+            claim_hash        CHAR(64),
+            description       TEXT,
+            detected_at       TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE (conversation_id, evaluation_run_id, issue_type, claim_hash)
         );
-    """)
+        """
+    )
 
 
 async def _create_rag_chunks_table(conn: asyncpg.Connection) -> None:
@@ -227,6 +234,10 @@ async def _create_indexes(conn: asyncpg.Connection) -> None:
         ON response_evaluations(is_golden)
         WHERE is_golden = true;
     """)
+    await conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_issues_conversation
+        ON response_issues(conversation_id);
+    """)
 
 
 async def init_db() -> asyncpg.Pool:
@@ -283,7 +294,7 @@ async def save_feedback(
     Enregistre (ou met à jour) le feedback humain d'une conversation.
 
     Ferme la boucle humain-dans-la-boucle : les réponses jugées exemplaires
-    (is_golden=true) alimentent response_evaluations, d'où fine_tuning/train.py
+    (is_golden=true) alimentent response_evaluations, d'où experimental/fine_tuning/train.py
     exporte ensuite le jeu SFT. ON CONFLICT gère le cas d'un feedback multiple
     sur la même conversation (UNIQUE(conversation_id)).
     """
@@ -300,3 +311,51 @@ async def save_feedback(
         """,
         conversation_id, human_rating, human_feedback, is_golden,
     )
+
+
+async def save_auto_evaluation(
+    conn: asyncpg.Connection,
+    conversation_id: str,
+    auto_score: float,
+    auto_criteria: dict,
+    evaluation_run_id: str,
+    issues: list[dict] | None = None,
+) -> None:
+    """
+    Enregistre l'auto-évaluation (Juge + Avocat) SANS écraser le feedback humain.
+
+    UPSERT symétrique : seuls auto_score / auto_criteria / evaluated_at sont
+    écrits — human_rating / human_feedback / is_golden sont préservés (la boucle
+    humain reste la source de vérité pour le fine-tuning). Les issues (claims
+    contestés par l'Avocat) sont insérées dans response_issues avec
+    evaluation_run_id pour l'idempotence (MT-02.06).
+    """
+    await conn.execute(
+        """
+        INSERT INTO response_evaluations
+            (conversation_id, auto_score, auto_criteria, evaluated_at)
+        VALUES ($1, $2, $3, NOW())
+        ON CONFLICT (conversation_id) DO UPDATE SET
+            auto_score    = EXCLUDED.auto_score,
+            auto_criteria = EXCLUDED.auto_criteria,
+            evaluated_at  = NOW()
+        """,
+        conversation_id, auto_score, json.dumps(auto_criteria),
+    )
+
+    if issues:
+        for issue in issues:
+            await conn.execute(
+                """
+                INSERT INTO response_issues
+                    (conversation_id, evaluation_run_id, issue_type, claim_hash, description)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (conversation_id, evaluation_run_id, issue_type, claim_hash)
+                DO NOTHING
+                """,
+                conversation_id,
+                issue["evaluation_run_id"],
+                issue["issue_type"],
+                issue["claim_hash"],
+                issue["description"],
+            )

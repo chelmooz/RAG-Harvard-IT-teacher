@@ -59,9 +59,13 @@ flowchart LR
         BE[FastAPI Backend :8001]
         PG[(PostgreSQL + pgvector :5432)]
         OL[Ollama LLM :11434<br/>Vulkan / RADV]
+        EVAL[Auto-Eval<br/>Judge + Devil's Advocate<br/>sequential · qwen3:14b]
         U --> FE --> NG --> BE
         BE --> PG
         BE --> OL
+        BE --> EVAL
+        EVAL --> OL
+        EVAL --> PG
     end
 
     subgraph LAYERB["Layer B · LLM Wiki Vault (compiled knowledge)"]
@@ -91,6 +95,13 @@ sequenceDiagram
     PG-->>BE: top-k chunks
     BE->>OL: Prompt + context
     OL-->>BE: Answer
+    BE->>BE: _persist_conversation (async task)
+    BE->>BE: _eval_after_persist (await persist)
+    BE->>OL: Judge prompt (format=json, temp=0)
+    OL-->>BE: JudgeResult (fidélité + pertinence)
+    BE->>OL: Devil's Advocate prompt (format=json, temp=0)
+    OL-->>BE: DevilAdvocateResult (claims non sourcés)
+    BE->>PG: save_auto_evaluation + response_issues
     BE-->>U: Response + citations
 ```
 
@@ -141,6 +152,11 @@ flowchart TB
 - **Inputs:** PDF, DOCX, PPTX, XLSX, TXT, MD, plus audio/video via Whisper.
 - **Endpoints:** `/chat`, `/documents/upload`, `/indexing/directory`,
   `/datasets/stats`, `/models/switch`, `/services/{start,stop,restart}`, …
+- **Auto-evaluation (Judge + Devil's Advocate):** after each `/chat` answer the
+  backend *optionally* runs a local Judge + Devil's Advocate on the same
+  `qwen3:14b` model (gated by `AUTO_EVALUATE`). Results land in
+  `response_evaluations` + `response_issues` (see §7). Runs **sequentially**
+  off the single loaded model — no parallel load, no extra VRAM.
 
 All services are wired through the `prof-ia-network` Docker bridge; only Nginx,
 the frontend and the backend are exposed on the LAN — PostgreSQL and Ollama stay
@@ -218,7 +234,8 @@ RAG-Harvard-IT-teacher/
 ├── docker-compose.yml        # Orchestrates the RAG stack
 ├── .env.example              # Required secrets (POSTGRES_PASSWORD, API_TOKEN)
 ├── backend/                  # FastAPI + RAG engine + doc processors
-│   └── api/{main,rag_engine,config,database,document_processor}.py
+│   ├── api/{main,rag_engine,config,database,document_processor,evaluation}.py
+│   └── tests/test_evaluation.py  # 22 tests (Judge + Devil's Advocate + UPSERT)
 ├── frontend/                 # React UI (Terminal / Dashboard / Minimal)
 ├── config/nginx.conf         # Reverse proxy
 ├── fine_tuning/              # LoRA training (train.py, config.yaml)
@@ -250,9 +267,21 @@ RAG-Harvard-IT-teacher/
   build the SFT JSONL golden set.
 - **LoRA**: `fine_tuning/train.py` (PEFT + SFTTrainer, fp16, r=16) turns the
   golden set into a custom Ollama model — closing the local improvement loop.
-- **Auto-scoring (planned, not wired).** `AUTO_EVALUATE` defaults to `False`:
-  no LLM-judge score is generated automatically in v6.0. The optional
-  auto-scoring job (threshold `GOLDEN_THRESHOLD=0.85`) is future work.
+- **Auto-evaluation (Judge + Devil's Advocate) — implemented.** After every
+  response, `run_evaluation` runs **sequentially** (single `qwen3:14b` model,
+  `format=json`, `temp=0`):
+  1. **Judge** — scores `faithfulness` (0–1) + `relevance` (0–1) + `verdict`
+     (`good`/`needs_improvement`/`bad`).
+  2. **Devil's Advocate** — lists `claims` unsupported by the context.
+  The `AutoEvaluationPayload` is persisted via `save_auto_evaluation`
+  (symmetric, idempotent UPSERT keyed by deterministic `evaluation_run_id`),
+  plus `response_issues` (UNIQUE on `conversation_id`+`evaluation_run_id`+
+  `issue_type`+`claim_hash`). Quality-first settings: `EVAL_TIMEOUT_S=15`,
+  `EVAL_NUM_PREDICT=150`, `EVAL_NUM_CTX=2048`, `EVAL_SAMPLE_RATE=1.0`
+  (everything is scored — latency tolerated). Disabled by default
+  (`AUTO_EVALUATE=false` in `docker-compose.yml`); activation = isolated commit
+  + `v6.1-auto-eval` tag. Calibrate on 20 golden samples (Pearson r ≥ 0.7)
+  before enabling.
 
 ---
 

@@ -20,12 +20,18 @@ CORRECTIFS v6.0 CONSERVÉS :
   - FIX BUG#6 : JWT_SECRET renommé API_TOKEN_SOURCE (pas de JWT émis)
 """
 
-import os
-import secrets
 from functools import lru_cache
 
-from loguru import logger
 from pydantic_settings import BaseSettings
+
+from .validators import (
+    _inject_rocm_env,
+    _validate_amd_cus,
+    _validate_api_token,
+    _validate_cors,
+    _validate_database_url,
+    _validate_token_source,
+)
 
 
 class Settings(BaseSettings):
@@ -48,8 +54,20 @@ class Settings(BaseSettings):
     # Laisse ~2,7 Go de marge sur le budget 12 Go (AMD_GTT_SIZE_MB) pour le
     # KV-cache : contexte à garder modeste (RAG_TOP_K=5, chunks courts).
     # Qwen3 supporte le mode "thinking" — désactivé par défaut pour un RAG
-    # factuel (ajouter /no_think au prompt système si besoin de le forcer).
+    # factuel (ajouter <think:6124c78e></think:6124c78e> au prompt système si besoin de le forcer).
     OLLAMA_MODEL: str = "qwen3:14b"
+
+    # ── Ollama (options de génération) ───────────────────────────
+    # Valeurs calibrées pour BC-250 (validated point 3) — reprises telles
+    # quelles depuis l'ancien dict hardcodé d'OllamaLLMClient.generate().
+    OLLAMA_TEMPERATURE: float = 0.3
+    OLLAMA_TOP_P:       float = 0.9
+    OLLAMA_TOP_K:       int   = 40
+    OLLAMA_NUM_PREDICT: int   = 1024
+    OLLAMA_NUM_CTX:     int   = 4096
+    OLLAMA_NUM_THREAD:  int   = 6
+    OLLAMA_NUM_GPU:     int   = 99
+    OLLAMA_F16_KV:      bool  = True
 
     # ── ROCm / AMD BC-250 ────────────────────────────────────────
     HSA_OVERRIDE_GFX_VERSION: str = "10.1.3"  # Cyan Skillfish → gfx1013
@@ -96,6 +114,16 @@ class Settings(BaseSettings):
     # /feedback. Le job d'auto-scoring est un développement futur (voir README §7).
     AUTO_EVALUATE:    bool  = False
     GOLDEN_THRESHOLD: float = 0.85
+
+    # ── Auto-évaluation (Juge + Avocat du diable) ───────────────
+    # Quality-first : temperature=0 (déterministe), format=json.
+    # Exécution SÉQUENTIELLE (OLLAMA_NUM_PARALLEL=1) — pas de gather.
+    EVAL_TIMEOUT_S:   float = 15.0
+    EVAL_NUM_PREDICT: int   = 150
+    EVAL_NUM_CTX:     int   = 2048
+    # 1.0 = toutes les conversations évaluées (quality-first).
+    # Réductible (0.5 / 0.3) si la charge dépasse le budget BC-250.
+    EVAL_SAMPLE_RATE: float = 1.0
 
 # ── Sécurité ─────────────────────────────────────────────────
     # Clé source pour générer API_TOKEN si non défini explicitement.
@@ -146,69 +174,3 @@ def get_settings() -> Settings:
     _validate_amd_cus(s)
     _inject_rocm_env(s)
     return s
-
-
-def _validate_token_source(s: Settings) -> None:
-    if not s.API_TOKEN_SOURCE:
-        s.API_TOKEN_SOURCE = secrets.token_urlsafe(32)
-        logger.warning(
-            "⚠️  API_TOKEN_SOURCE non défini dans .env — clé aléatoire générée. "
-            "Les sessions seront invalidées au redémarrage. "
-            "Ajoutez API_TOKEN_SOURCE=<votre_clé> dans .env pour la persistance."
-        )
-
-
-def _validate_database_url(s: Settings) -> None:
-    if not s.DATABASE_URL:
-        raise ValueError(
-            "DATABASE_URL obligatoire dans .env. "
-            "Exemple : DATABASE_URL=postgresql://user:password@localhost:5432/prof_ia_v5"
-        )
-
-
-def _validate_api_token(s: Settings) -> None:
-    if not s.API_TOKEN:
-        s.API_TOKEN = s.API_TOKEN_SOURCE
-        if not s.API_TOKEN:
-            s.API_TOKEN = secrets.token_urlsafe(32)
-            logger.warning(
-                "⚠️  API_TOKEN non défini dans .env — clé aléatoire générée. "
-                "Ajoutez API_TOKEN=<votre_clé> dans .env pour la persistance."
-            )
-
-
-def _validate_cors(s: Settings) -> None:
-    if s.CORS_ORIGINS == "*" and not s.DEBUG:
-        logger.warning(
-            "⚠️  CORS_ORIGINS='*' en mode non DEBUG — restreignez les origines "
-            "dans .env (ex: CORS_ORIGINS=http://localhost:3000) en production."
-        )
-
-
-def _validate_amd_cus(s: Settings) -> None:
-    if s.AMD_RDNA2_CUS not in (24, 40):
-        logger.warning(
-            f"⚠️  AMD_RDNA2_CUS={s.AMD_RDNA2_CUS} inhabituel (24=stock, 40=débloqué). "
-            "Vérifiez votre .env."
-        )
-    if s.AMD_RDNA2_CUS == 40 and not s.AMD_CU_UNLOCK_APPLIED:
-        logger.warning(
-            "⚠️  AMD_RDNA2_CUS=40 mais AMD_CU_UNLOCK_APPLIED=False — "
-            "si le module amdgpu patché (bc250-40cu-unlock) n'est pas chargé, "
-            "cette valeur est juste un mensonge de config qui fausse "
-            "PYTORCH_HIP_ALLOC_CONF et EMBEDDING_BATCH_SIZE. "
-            "Vérifiez avec : sudo dmesg | grep active_cu_number"
-        )
-    if s.AMD_RDNA2_CUS == 24 and s.AMD_CU_UNLOCK_APPLIED:
-        logger.warning(
-            "⚠️  AMD_CU_UNLOCK_APPLIED=True mais AMD_RDNA2_CUS=24 — "
-            "mettez AMD_RDNA2_CUS=40 dans .env pour que le calcul mémoire en profite."
-        )
-
-
-def _inject_rocm_env(s: Settings) -> None:
-    os.environ.setdefault("HSA_OVERRIDE_GFX_VERSION", s.HSA_OVERRIDE_GFX_VERSION)
-    os.environ.setdefault(
-        "PYTORCH_HIP_ALLOC_CONF",
-        f"max_split_size_mb:{s.AMD_GTT_SIZE_MB // s.AMD_RDNA2_CUS}"
-    )

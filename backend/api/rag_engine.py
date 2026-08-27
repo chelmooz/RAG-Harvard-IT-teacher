@@ -8,11 +8,15 @@ CORRECTIFS v6.0 appliqués :
   - FIX W4   : half() avant torch.compile() (ordre corrigé)
   - FIX W10  : schéma rag_chunks supprimé ici — database.py est la seule source de vérité
 
-OPTIMISATIONS BC-250 CONSERVÉES :
-  - Mémoire GDDR6 unifiée : zéro copie CPU↔GPU via tenseurs partagés
-  - 24 CUs RDNA2 : batch d'embeddings vectorisé sur ROCm 7.2
-  - asyncpg + pgvector HNSW (PostgreSQL) en remplacement de ChromaDB
-  - Python 3.13 : asyncio.to_thread pour les appels GPU bloquants
+ARCHITECTURE v6.1 (DIP + SRP) :
+  - EmbeddingProvider injecté (Protocol) — pas de SentenceTransformer direct
+  - LLMClient injecté (Protocol) — pas de httpx direct
+  - Pool DB partagé via database.get_db()
+  - Responsabilités séparées (PR P1) :
+      * Retriever  → recherche vectorielle (HNSW pgvector)
+      * Indexer    → indexation + stats + maintenance de la collection
+      * Generator  → génération LLM (Ollama) + construction des prompts
+  - RAGEngine = facade / composition root qui orchestre les trois.
 """
 
 import asyncio
@@ -20,7 +24,6 @@ import os
 from typing import Any
 
 import asyncpg
-import httpx
 import numpy as np
 from loguru import logger
 
@@ -35,6 +38,7 @@ import torch
 from sentence_transformers import SentenceTransformer
 
 from .config import get_settings
+from .protocols import EmbeddingProvider, LLMClient
 
 _settings = get_settings()
 
@@ -64,20 +68,12 @@ def _get_device() -> torch.device:
 DEVICE = _get_device()
 
 
-# ── EmbeddingEngine ────────────────────────────────────────────────────────────
+# ── LocalEmbeddingProvider (implémentation concrète du Protocol) ───────────────
 
-class EmbeddingEngine:
+class LocalEmbeddingProvider:
     """
-    Moteur d'embeddings vectorisé pour RDNA2 (24 CUs stock, 40 CUs si débloqués
-    via scripts/unlock-40cu.sh — voir AMD_RDNA2_CUS dans config.py).
-
-    Design :
-    - SentenceTransformer en batch de BATCH_SIZE (mis à l'échelle des CUs disponibles).
-    - fp16 : divise la VRAM par 2, suffisant pour la similarité cosine.
-    - normalize_embeddings=True : produit scalaire = similarité cosine (2× plus rapide).
-
-    FIX W4 : .half() appliqué AVANT torch.compile().
-    Inverser l'ordre invalide la compilation triton (le graphe compilé devient fp32).
+    Implémentation locale de EmbeddingProvider utilisant SentenceTransformer.
+    Remplace l'ancien EmbeddingEngine interne.
     """
 
     # Calibré pour 24 CUs RDNA2 (64) ; mis à l'échelle si 40 CU débloqués.
@@ -106,7 +102,7 @@ class EmbeddingEngine:
             except Exception as e:
                 logger.warning(f"⚠️  torch.compile échoué : {e} — mode standard")
 
-        logger.info("✅ EmbeddingEngine prêt")
+        logger.info("✅ LocalEmbeddingProvider prêt")
 
     def encode(self, texts: list[str]) -> np.ndarray:
         """
@@ -129,68 +125,26 @@ class EmbeddingEngine:
         return self.encode([text])[0]
 
 
-# ── RAGEngine ──────────────────────────────────────────────────────────────────
+# ── Retriever (responsabilité unique : recherche vectorielle) ──────────────────
 
-class RAGEngine:
+class Retriever:
     """
-    Moteur RAG v6.0 — PostgreSQL + pgvector HNSW.
+    Recherche les chunks les plus proches via pgvector HNSW.
 
-    FIX BUG#3 : RAGEngine réutilise le pool asyncpg de database.py via get_db().
-    Plus de double create_pool() → économie de ~80 Mo de connexions sur la GDDR6.
-
-    FIX W10 : le schéma (CREATE TABLE, CREATE INDEX) est uniquement dans database.py.
-    RAGEngine ne crée plus rien au démarrage — database.py est la seule source de vérité.
+    DIP : EmbeddingProvider injecté (pas d'instance interne SentenceTransformer).
+    Le pool est partagé via attach_pool() (initialisé par database.get_db()).
     """
 
-    def __init__(
-        self,
-        db_url: str,
-        ollama_host: str = None,
-        model_name: str = "qwen3:14b",
-        embedding_model: str = EmbeddingEngine.MODEL_NAME,
-    ):
-        self.db_url = db_url
-        self.ollama_host = ollama_host or get_settings().OLLAMA_HOST
-        self.model_name = model_name
-
-        # FIX BUG#3 : _pool assigné depuis get_db() dans initialize(),
-        # pas via create_pool() → un seul pool pour toute l'application
+    def __init__(self, embedding_provider: EmbeddingProvider):
+        self.embedding_provider = embedding_provider
         self._pool: asyncpg.Pool | None = None
-        self.embedding_engine = EmbeddingEngine(embedding_model)
 
-        # Timeout généreux pour Ollama sur BC-250 (CPU+GPU GDDR6 partagé)
-        self.http_client = httpx.AsyncClient(timeout=180.0)
+    def attach_pool(self, pool: asyncpg.Pool) -> None:
+        self._pool = pool
 
-    # ── Initialisation ─────────────────────────────────────────────────────────
-
-    async def initialize(self):
-        """
-        Récupère le pool partagé de database.py et vérifie Ollama.
-
-        FIX BUG#3 + FIX W10 :
-        - Pas de create_pool() ici → on réutilise le pool global init_db().
-        - Pas de CREATE TABLE/INDEX ici → géré exclusivement par database.init_db().
-        Cette séparation des responsabilités garantit un schéma cohérent
-        et évite deux définitions divergentes de rag_chunks.
-        """
-        logger.info("🔧 Initialisation RAG Engine v6.0...")
-
-        # Réutiliser le pool global — init_db() a déjà créé les tables
-        from .database import get_db
-        self._pool = await get_db()
-
-        logger.info("✅ Pool pgvector partagé (database.py)")
-
-        try:
-            await self.check_ollama_health()
-            logger.info(f"✅ Ollama opérationnel — modèle : {self.model_name}")
-        except Exception as e:
-            logger.warning(f"⚠️  Ollama non disponible au démarrage : {e}")
-
-    # ── Retrieval ──────────────────────────────────────────────────────────────
-
+    @staticmethod
     def _build_retrieve_sql(
-        self, query_vec, top_k: int, threshold: float, metier_filter: str | None
+        query_vec, top_k: int, threshold: float, metier_filter: str | None
     ) -> tuple[str, list]:
         vec = query_vec.tolist()
         limit = top_k * 2
@@ -219,6 +173,23 @@ class RAGEngine:
         """
         return sql, [vec, limit, threshold]
 
+    async def _search(
+        self, query_vec, top_k: int, threshold: float, metier_filter: str | None
+    ) -> list[dict[str, Any]]:
+        sql, params = self._build_retrieve_sql(query_vec, top_k, threshold, metier_filter)
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(sql, *params)
+
+        results = []
+        for i, row in enumerate(rows[:top_k]):
+            results.append({
+                "text":     row["content"],
+                "metadata": dict(row["metadata"]),
+                "score":    float(row["score"]),
+                "rank":     i + 1,
+            })
+        return results
+
     async def retrieve(
         self,
         query: str,
@@ -234,41 +205,46 @@ class RAGEngine:
         Tous les paramètres sont liés via asyncpg ($1, $2, $3, $4) → pas d'injection.
 
         OPTIMISATION BC-250 :
-        - encode_single sur GPU RDNA2 (asyncio.to_thread pour ne pas bloquer asyncio).
+        - encode_single via provider injecté (asyncio.to_thread pour ne pas bloquer asyncio).
         - vecteur numpy passé directement à asyncpg (pas de sérialisation JSON).
         - WHERE métier en SQL natif AVANT le tri vectoriel → moins de chunks à trier.
         - LIMIT top_k*2 puis slicing Python : over-fetch améliore le recall HNSW.
         """
         query_vec = await asyncio.to_thread(
-            self.embedding_engine.encode_single, query
+            self.embedding_provider.encode_single, query
         )
-
-        sql, params = self._build_retrieve_sql(
-            query_vec, top_k, threshold, metier_filter
-        )
-
-        async with self._pool.acquire() as conn:
-            rows = await conn.fetch(sql, *params)
-
-        results = []
-        for i, row in enumerate(rows[:top_k]):
-            results.append({
-                "text":     row["content"],
-                "metadata": dict(row["metadata"]),
-                "score":    float(row["score"]),
-                "rank":     i + 1,
-            })
-
+        results = await self._search(query_vec, top_k, threshold, metier_filter)
         logger.info(
             f"📚 {len(results)}/{top_k} chunks ≥ seuil {threshold} "
             f"(métier: {metier_filter or 'tous'})"
         )
         return results
 
-    # ── Indexation ─────────────────────────────────────────────────────────────
+    async def check_db_health(self) -> None:
+        async with self._pool.acquire() as conn:
+            await conn.fetchval("SELECT 1;")
 
+
+# ── Indexer (responsabilité unique : indexation + stats + maintenance) ─────────
+
+class Indexer:
+    """
+    Indexe les chunks et gère la collection pgvector (stats + reset).
+
+    DIP : EmbeddingProvider injecté (pas d'instance interne SentenceTransformer).
+    Le pool est partagé via attach_pool() (initialisé par database.get_db()).
+    """
+
+    def __init__(self, embedding_provider: EmbeddingProvider):
+        self.embedding_provider = embedding_provider
+        self._pool: asyncpg.Pool | None = None
+
+    def attach_pool(self, pool: asyncpg.Pool) -> None:
+        self._pool = pool
+
+    @staticmethod
     def _validate_embeddings(
-        self, embeddings: np.ndarray, filename: str
+        embeddings: np.ndarray, filename: str
     ) -> None:
         if not np.isfinite(embeddings).all():
             nan_chunks = int(np.sum(~np.isfinite(embeddings).any(axis=1)))
@@ -329,7 +305,7 @@ class RAGEngine:
         logger.info(f"🔢 Encodage batch : {len(texts)} chunks pour « {filename} »...")
 
         embeddings = await asyncio.to_thread(
-            self.embedding_engine.encode, texts
+            self.embedding_provider.encode, texts
         )
 
         self._validate_embeddings(embeddings, filename)
@@ -349,7 +325,46 @@ class RAGEngine:
 
         logger.info(f"✅ {len(records)} chunks indexés pour « {filename} »")
 
-    # ── Génération ─────────────────────────────────────────────────────────────
+    async def get_collection_stats(self) -> dict[str, Any]:
+        async with self._pool.acquire() as conn:
+            total = await conn.fetchval("SELECT COUNT(*) FROM rag_chunks;")
+            files = await conn.fetchval(
+                "SELECT COUNT(DISTINCT file_id) FROM rag_chunks;"
+            )
+        return {
+            "total_chunks":    total,
+            "total_documents": files,
+            "collection_name": "rag_chunks (pgvector HNSW)",
+            "backend":         "PostgreSQL + pgvector v6.1",
+        }
+
+    async def reset_collection(self):
+        """Vide la table rag_chunks et réinitialise les séquences."""
+        async with self._pool.acquire() as conn:
+            count = await conn.fetchval("SELECT COUNT(*) FROM rag_chunks;")
+            logger.warning(
+                f"⚠️  RESET COLLECTION : {count} chunks vont être supprimés — irréversible"
+            )
+            await conn.execute("TRUNCATE TABLE rag_chunks RESTART IDENTITY;")
+            logger.warning("✅ Collection réinitialisée (TRUNCATE + RESTART IDENTITY)")
+
+    async def check_db_health(self) -> None:
+        async with self._pool.acquire() as conn:
+            await conn.fetchval("SELECT 1;")
+
+
+# ── Generator (responsabilité unique : génération LLM + prompts) ────────────────
+
+class Generator:
+    """
+    Génère la réponse finale via le LLM injecté (Ollama).
+
+    DIP : LLMClient injecté (pas de httpx direct).
+    Construit les prompts système / complet (logique pure, testable).
+    """
+
+    def __init__(self, llm_client: LLMClient):
+        self.llm_client = llm_client
 
     @staticmethod
     def _build_system_prompt(system_prompt: str) -> str:
@@ -379,33 +394,6 @@ class RAGEngine:
             "dis-le clairement sans inventer d'information."
         )
 
-    async def _call_ollama(self, prompt: str, system: str) -> str:
-        try:
-            response = await self.http_client.post(
-                f"{self.ollama_host}/api/generate",
-                json={
-                    "model":  self.model_name,
-                    "prompt": prompt,
-                    "system": system,
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.3,
-                        "top_p":       0.9,
-                        "top_k":       40,
-                        "num_predict": 1024,
-                        "num_ctx":     4096,
-                        "num_thread":  6,
-                        "num_gpu":     99,
-                        "f16_kv":      True,
-                    },
-                },
-            )
-            response.raise_for_status()
-            return response.json().get("response", "Erreur : réponse Ollama vide")
-        except Exception as e:
-            logger.error(f"❌ Erreur génération Ollama : {e}")
-            return f"Erreur lors de la génération : {e}"
-
     async def generate(
         self,
         query: str,
@@ -414,50 +402,124 @@ class RAGEngine:
     ) -> str:
         safe_system = self._build_system_prompt(system_prompt)
         full_prompt = self._build_full_prompt(query, context)
-        return await self._call_ollama(full_prompt, safe_system)
+        return await self.llm_client.generate(full_prompt, safe_system)
 
-    # ── Stats & Maintenance ────────────────────────────────────────────────────
+
+# ── RAGEngine (facade / composition root) ──────────────────────────────────────
+
+class RAGEngine:
+    """
+    Orchestrateur RAG v6.1 — PostgreSQL + pgvector HNSW.
+
+    DIP appliqué :
+    - EmbeddingProvider injecté (pas d'instance interne)
+    - LLMClient injecté (pas de httpx direct)
+    - Pool DB partagé via database.get_db()
+
+    SRP (PR P1) : les responsabilités sont déléguées à Retriever / Indexer /
+    Generator. RAGEngine reste la facade utilisée par l'API (endpoints /chat,
+    /documents, /indexing…) et par PGVectorStore.
+    """
+
+    def __init__(
+        self,
+        db_url: str,
+        embedding_provider: EmbeddingProvider,
+        llm_client: LLMClient,
+        ollama_host: str = None,
+        model_name: str = "qwen3:14b",
+    ):
+        self.db_url = db_url
+        self.ollama_host = ollama_host or get_settings().OLLAMA_HOST
+        self.model_name = model_name
+
+        # Dépendances injectées
+        self.embedding_provider = embedding_provider
+        self.llm_client = llm_client
+
+        # Composants (SRP) — chaque responsabilité est isolée et testable
+        self._retriever = Retriever(embedding_provider)
+        self._indexer = Indexer(embedding_provider)
+        self._generator = Generator(llm_client)
+
+        # Pool partagé (initialisé dans initialize())
+        self._pool: asyncpg.Pool | None = None
+
+    # ── Initialisation ─────────────────────────────────────────────────────────
+
+    async def initialize(self):
+        """
+        Récupère le pool partagé de database.py et vérifie Ollama via client injecté.
+        """
+        logger.info("🔧 Initialisation RAG Engine v6.1...")
+
+        # Réutiliser le pool global — init_db() a déjà créé les tables
+        from .database import get_db
+        self._pool = await get_db()
+        self._retriever.attach_pool(self._pool)
+        self._indexer.attach_pool(self._pool)
+
+        logger.info("✅ Pool pgvector partagé (database.py)")
+
+        try:
+            await self.check_ollama_health()
+            logger.info(f"✅ Ollama opérationnel — modèle : {self.model_name}")
+        except Exception as e:
+            logger.warning(f"⚠️  Ollama non disponible au démarrage : {e}")
+
+    # ── Délégation Retriever ──────────────────────────────────────────────────
+
+    async def retrieve(
+        self,
+        query: str,
+        top_k: int = 5,
+        threshold: float = 0.72,
+        metier_filter: str | None = None,
+    ) -> list[dict[str, Any]]:
+        return await self._retriever.retrieve(query, top_k, threshold, metier_filter)
+
+    # ── Délégation Indexer ────────────────────────────────────────────────────
+
+    async def index_chunks(
+        self,
+        chunks: list[dict[str, Any]],
+        file_id: str,
+        filename: str,
+    ):
+        return await self._indexer.index_chunks(chunks, file_id, filename)
 
     async def get_collection_stats(self) -> dict[str, Any]:
-        async with self._pool.acquire() as conn:
-            total = await conn.fetchval("SELECT COUNT(*) FROM rag_chunks;")
-            files = await conn.fetchval(
-                "SELECT COUNT(DISTINCT file_id) FROM rag_chunks;"
-            )
-        return {
-            "total_chunks":    total,
-            "total_documents": files,
-            "collection_name": "rag_chunks (pgvector HNSW)",
-            "backend":         "PostgreSQL + pgvector v6.0",
-        }
+        return await self._indexer.get_collection_stats()
 
     async def reset_collection(self):
-        """Vide la table rag_chunks et réinitialise les séquences."""
-        async with self._pool.acquire() as conn:
-            count = await conn.fetchval("SELECT COUNT(*) FROM rag_chunks;")
-            logger.warning(
-                f"⚠️  RESET COLLECTION : {count} chunks vont être supprimés — irréversible"
-            )
-            await conn.execute("TRUNCATE TABLE rag_chunks RESTART IDENTITY;")
-            logger.warning("✅ Collection réinitialisée (TRUNCATE + RESTART IDENTITY)")
+        return await self._indexer.reset_collection()
+
+    # ── Délégation Generator ──────────────────────────────────────────────────
+
+    async def generate(
+        self,
+        query: str,
+        context: str | None = None,
+        system_prompt: str = "",
+    ) -> str:
+        return await self._generator.generate(query, context, system_prompt)
 
     # ── Health checks ──────────────────────────────────────────────────────────
 
     async def check_ollama_health(self):
-        r = await self.http_client.get(f"{self.ollama_host}/api/tags")
-        r.raise_for_status()
+        return await self.llm_client.check_health()
 
     async def check_db_health(self):
-        async with self._pool.acquire() as conn:
-            await conn.fetchval("SELECT 1;")
+        await self._retriever.check_db_health()
 
-    # ── Fermeture ──────────────────────────────────────────────────────────────
+    # ── Fermeture ─────────────────────────────────────────────────────────────
 
     async def close(self):
         """
-        Ferme le client HTTP Ollama.
+        Ferme le client HTTP Ollama via le client injecté.
         NE ferme PAS self._pool — c'est le pool partagé de database.py,
         fermé par close_db() au shutdown de l'application FastAPI.
         """
-        await self.http_client.aclose()
-        logger.info("✅ RAG Engine v6.0 fermé (pool DB géré par database.py)")
+        if hasattr(self.llm_client, 'close'):
+            await self.llm_client.close()
+        logger.info("✅ RAG Engine v6.1 fermé (pool DB géré par database.py)")

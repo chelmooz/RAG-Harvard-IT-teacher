@@ -1,23 +1,12 @@
 """
-Prof IA v6.0 — Point d'entrée FastAPI (AMD BC-250 / Cyan Skillfish)
+Prof IA v6.1 — Point d'entrée FastAPI (AMD BC-250 / Cyan Skillfish)
 ====================================================================
-CORRECTIFS v6.0 :
-  - FIX BUG#1 : Ce fichier était absent — application ne pouvait pas démarrer
-  - FIX BUG#4 : register_vector() appelé au startup (voir database.py v6.0)
-  - FIX BUG#5 : num_gpu corrigé dans RAGEngine (voir rag_engine.py v6.0)
-
-Architecture des endpoints :
-  GET  /health              — santé de l'application (DB + Ollama + GPU)
-  POST /documents/upload    — upload et indexation d'un document
-  GET  /documents/list      — liste des documents indexés
-  DELETE /documents/{file_id} — suppression d'un document
-  GET  /indexing/status     — statistiques de la collection RAG
-  POST /indexing/directory  — indexation d'un répertoire complet
-  POST /chat                — requête RAG (retrieval + génération)
-  GET  /chat/history        — historique des conversations
+DIP appliqué : dépendances injectées via FastAPI Depends
 """
 
 import asyncio
+import hashlib
+import httpx
 import secrets
 import time
 import uuid
@@ -29,9 +18,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from .config import get_settings
-from .database import close_db, get_db, init_db, save_feedback
-from .document_processor import DocumentProcessor
-from .rag_engine import RAGEngine
+from .database import close_db, get_db, init_db, save_auto_evaluation, save_feedback
+from .evaluation import build_issues, run_evaluation
+from .dependencies import (
+    get_document_processor as get_doc_processor_dep,
+)
+from .dependencies import (
+    get_rag_engine as get_rag_engine_dep,
+)
 from .schemas import (
     ChatRequest,
     ChatResponse,
@@ -44,6 +38,7 @@ from .schemas import (
 settings = get_settings()
 
 # ── Authentification API ──────────────────────────────────────────────────────
+
 PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/redoc"}
 
 
@@ -62,64 +57,36 @@ async def verify_api_token(request: Request):
     )
 
 
-# ── Instances globales ─────────────────────────────────────────────────────────
-_rag_engine: RAGEngine | None = None
-_doc_processor: DocumentProcessor | None = None
-
-_bg_tasks: set = set()
-
-
-def get_rag_engine() -> RAGEngine:
-    if _rag_engine is None:
-        raise HTTPException(status_code=503, detail="RAG Engine non initialisé")
-    return _rag_engine
-
-
-def get_doc_processor() -> DocumentProcessor:
-    if _doc_processor is None:
-        raise HTTPException(status_code=503, detail="Document Processor non initialisé")
-    return _doc_processor
-
-
 # ── Lifecycle ──────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Startup : init DB (pgvector + register_vector — FIX BUG#4) + RAGEngine.
-    Shutdown : fermeture propre HTTP client + pool PostgreSQL.
+    Startup : init DB (pgvector + register_vector) + warm-up dependencies.
+    Shutdown : fermeture propre clients + pool PostgreSQL.
     """
-    global _rag_engine, _doc_processor
+    logger.info("🚀 Démarrage Prof IA v6.1 (AMD BC-250)...")
 
-    logger.info("🚀 Démarrage Prof IA v6.0 (AMD BC-250)...")
-
-    # FIX BUG#4 : le codec pgvector (+ jsonb) est enregistré par le callback
-    # init=_init_connection de create_pool (voir database.py) — une fois par connexion.
+    # Initialise la base de données (pool + schema)
     await init_db()
     logger.info("✅ Base de données initialisée (pgvector enregistré)")
 
-    _rag_engine = RAGEngine(
-        db_url=settings.DATABASE_URL,
-        ollama_host=settings.OLLAMA_HOST,
-        model_name=settings.OLLAMA_MODEL,
-        embedding_model=settings.EMBEDDING_MODEL,
-    )
-    await _rag_engine.initialize()
+    # Warm-up des dépendances (crée les instances via DI)
+    rag = await get_rag_engine_dep()
+    await rag.initialize()
     logger.info("✅ RAG Engine initialisé")
 
-    _doc_processor = DocumentProcessor(upload_dir=settings.UPLOAD_DIR)
+    _ = await get_doc_processor_dep()
     logger.info("✅ Document Processor initialisé")
 
-    logger.info(f"🟢 Prof IA v6.0 prêt — {settings.APP_NAME}")
+    logger.info(f"🟢 Prof IA v6.1 prêt — {settings.APP_NAME}")
 
     yield  # Application en service
 
     # Shutdown
-    logger.info("🔴 Arrêt de Prof IA v6.0...")
-    if _rag_engine:
-        await _rag_engine.close()
-    if _doc_processor:
-        _doc_processor.unload_whisper()
+    logger.info("🔴 Arrêt de Prof IA v6.1...")
+    if rag:
+        await rag.close()
     await close_db()
     logger.info("✅ Arrêt propre effectué")
 
@@ -133,9 +100,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — piloté par settings.CORS_ORIGINS (.env), plus de wildcard codé en dur.
-# CORS_ORIGINS="*" reste possible en dev (voir warning _validate_cors), mais
-# en production il faut lister les origines exactes (ex: http://192.168.1.11:3000).
+# CORS — piloté par settings.CORS_ORIGINS (.env)
 _cors_origins = (
     ["*"] if settings.CORS_ORIGINS.strip() == "*"
     else [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
@@ -149,13 +114,13 @@ app.add_middleware(
 )
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════════════
 # HEALTH
-# ══════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════════════
 
 @app.get("/health", response_model=HealthResponse, tags=["Monitoring"])
 async def health_check(
-    rag: RAGEngine = Depends(get_rag_engine),
+    rag = Depends(get_rag_engine_dep),
     _=Depends(verify_api_token),
 ):
     """
@@ -197,9 +162,9 @@ async def health_check(
     )
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════════════
 # CHAT / RAG
-# ══════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════════════
 
 def _build_context(chunks: list[dict]) -> tuple[bool, str | None]:
     """Construit le contexte RAG à partir des chunks récupérés."""
@@ -246,10 +211,79 @@ async def _persist_conversation(record: ConversationRecord):
         logger.warning(f"⚠️  Persistance conversation échouée : {e}")
 
 
+# ── Tâches d'arrière-plan (tracking pour cleanup) ──────────────────────────────
+_bg_tasks: set[asyncio.Task] = set()
+
+
+def _track_bg(task: asyncio.Task) -> None:
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
+
+
+def _should_evaluate(conversation_id: str) -> bool:
+    """MT-02.05 : échantillonnage déterministe via EVAL_SAMPLE_RATE.
+
+    Même conversation_id → même décision (seedé sur le hash), donc reproductible
+    en test. 1.0 = tout évalué, 0.0 = rien, sinon tirage < rate.
+    """
+    rate = settings.EVAL_SAMPLE_RATE
+    if rate >= 1.0:
+        return True
+    if rate <= 0.0:
+        return False
+    h = hashlib.sha256(conversation_id.encode()).hexdigest()
+    return int(h[:8], 16) / 0xFFFFFFFF < rate
+
+
+async def _eval_after_persist(
+    persist_task: asyncio.Task,
+    conversation_id: str,
+    query: str,
+    context: str | None,
+    response: str,
+) -> None:
+    """MT-02.03/MT-02.04 : attend la persistance (FK conversation) puis auto-évalue.
+
+    La course FK est évitée en attendant persist_task AVANT tout accès DB à
+    response_evaluations / response_issues. Si AUTO_EVALUATE=False ou si
+    l'échantillonnage exclut cette conversation, on ne fait rien.
+    """
+    try:
+        await persist_task
+    except Exception:
+        logger.warning("⚠️  Persistance échouée — auto-évaluation annulée")
+        return
+
+    if not settings.AUTO_EVALUATE:
+        return
+    if not _should_evaluate(conversation_id):
+        return
+
+    try:
+        async with httpx.AsyncClient(timeout=settings.EVAL_TIMEOUT_S) as client:
+            payload = await run_evaluation(
+                query=query, context=context or "", response=response,
+                client=client, conversation_id=conversation_id,
+            )
+        issues = build_issues(payload)
+        pool = await get_db()
+        async with pool.acquire() as conn:
+            await save_auto_evaluation(
+                conn,
+                conversation_id=conversation_id,
+                auto_score=payload.judge.score,
+                auto_criteria=payload.judge.criteria,
+                evaluation_run_id=payload.evaluation_run_id,
+                issues=issues,
+            )
+    except Exception as e:
+        logger.warning(f"⚠️  Auto-évaluation échouée : {e}")
+
+
 @app.post("/chat", response_model=ChatResponse, tags=["Chat"])
 async def chat(
     request: ChatRequest,
-    rag: RAGEngine = Depends(get_rag_engine),
+    rag = Depends(get_rag_engine_dep),
     _=Depends(verify_api_token),
 ):
     """
@@ -275,7 +309,7 @@ async def chat(
     )
     elapsed_ms = int((time.monotonic() - t_start) * 1000)
 
-    _task = asyncio.create_task(_persist_conversation(
+    _persist_task = asyncio.create_task(_persist_conversation(
         ConversationRecord(
             id=conversation_id,
             session_id=session_id,
@@ -290,8 +324,11 @@ async def chat(
             model_name=settings.OLLAMA_MODEL,
         )
     ))
-    _bg_tasks.add(_task)
-    _task.add_done_callback(_bg_tasks.discard)
+    # MT-02.04 : auto-évaluation branchée APRÈS la persistance (FK race évité
+    # dans _eval_after_persist qui await _persist_task avant tout accès DB).
+    _track_bg(asyncio.create_task(_eval_after_persist(
+        _persist_task, conversation_id, request.query, context, response_text,
+    )))
 
     return ChatResponse(
         response=response_text,
@@ -314,7 +351,7 @@ async def submit_feedback(
 
     Reçoit l'ID de conversation renvoyé par /chat et l'enregistre dans
     response_evaluations. Les réponses marquées is_golden=true alimentent
-    ensuite fine_tuning/train.py (export SFT JSONL).
+    ensuite experimental/fine_tuning/train.py (export SFT JSONL).
     """
     if payload.human_rating is not None and not (1 <= payload.human_rating <= 5):
         raise HTTPException(status_code=400, detail="human_rating doit être entre 1 et 5")
@@ -348,41 +385,41 @@ async def get_history(
             rows = await conn.fetch(
                 """SELECT id, session_id, timestamp, user_query, model_response,
                           rag_used, chunks_used, response_time_ms, metier
-                   FROM conversations
-                   WHERE session_id = $1
-                   ORDER BY timestamp DESC LIMIT $2""",
+                     FROM conversations
+                     WHERE session_id = $1
+                     ORDER BY timestamp DESC LIMIT $2""",
                 session_id, limit
             )
         elif metier:
             rows = await conn.fetch(
                 """SELECT id, session_id, timestamp, user_query, model_response,
                           rag_used, chunks_used, response_time_ms, metier
-                   FROM conversations
-                   WHERE metier = $1
-                   ORDER BY timestamp DESC LIMIT $2""",
+                     FROM conversations
+                     WHERE metier = $1
+                     ORDER BY timestamp DESC LIMIT $2""",
                 metier, limit
             )
         else:
             rows = await conn.fetch(
                 """SELECT id, session_id, timestamp, user_query, model_response,
                           rag_used, chunks_used, response_time_ms, metier
-                   FROM conversations
-                   ORDER BY timestamp DESC LIMIT $1""",
+                     FROM conversations
+                     ORDER BY timestamp DESC LIMIT $1""",
                 limit
             )
     return [dict(r) for r in rows]
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════════════
 # DOCUMENTS
-# ══════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════════════
 
 @app.post("/documents/upload", tags=["Documents"])
 async def upload_document(
     file: UploadFile = File(...),
     metier: str | None = None,
-    rag: RAGEngine = Depends(get_rag_engine),
-    proc: DocumentProcessor = Depends(get_doc_processor),
+    rag = Depends(get_rag_engine_dep),
+    proc = Depends(get_doc_processor_dep),
     _=Depends(verify_api_token),
 ):
     """
@@ -469,13 +506,13 @@ async def delete_document(
     return {"file_id": file_id, "chunks_deleted": deleted, "status": "deleted"}
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════════════
 # INDEXATION
-# ══════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════════════
 
 @app.get("/indexing/status", tags=["Indexation"])
 async def indexing_status(
-    rag: RAGEngine = Depends(get_rag_engine),
+    rag = Depends(get_rag_engine_dep),
     _=Depends(verify_api_token),
 ):
     """Statistiques de la collection RAG (total chunks, documents, backend)."""
@@ -485,13 +522,13 @@ async def indexing_status(
 @app.post("/indexing/directory", tags=["Indexation"])
 async def index_directory(
     directory: str,
-    rag: RAGEngine = Depends(get_rag_engine),
-    proc: DocumentProcessor = Depends(get_doc_processor),
+    rag = Depends(get_rag_engine_dep),
+    proc = Depends(get_doc_processor_dep),
     _=Depends(verify_api_token),
 ):
     """
     Indexe en parallèle tous les fichiers d'un répertoire.
-    Utilise asyncio.TaskGroup (Python 3.13) pour le parallélisme.
+    Utilise asyncio.gather + Semaphore pour le parallélisme.
     """
     try:
         stats = await proc.index_directory(directory, rag)
@@ -502,7 +539,7 @@ async def index_directory(
 
 @app.post("/indexing/reset", tags=["Indexation"])
 async def reset_collection(
-    rag: RAGEngine = Depends(get_rag_engine),
+    rag = Depends(get_rag_engine_dep),
     _=Depends(verify_api_token),
 ):
     """Vide entièrement la collection RAG (TRUNCATE). Action irréversible."""

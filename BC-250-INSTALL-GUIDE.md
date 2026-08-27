@@ -180,6 +180,11 @@ ollama pull qwen3:14b      # ~9,3 Go, tient en VRAM (12 Go)
 amdgpu_top                 # la ligne VRAM doit monter ~9 Go après un premier query
 ```
 
+> **Auto-évaluation (Juge + Avocat du Diable).** Le même modèle `qwen3:14b`
+> sert au RAG **et** à l'auto-évaluation (séquentiel, `AUTO_EVALUATE=false` par
+> défaut). Pour l'activer : `AUTO_EVALUATE=true` dans `docker-compose.yml`, puis
+> `docker compose up -d`. Calibrer sur 20 golden (Pearson r ≥ 0,7) avant prod.
+
 ---
 
 ## Étape 7 — Stress test & validation finale (OBLIGATOIRE avant prod)
@@ -257,6 +262,24 @@ cat .env
 
 > **⚠️ Sans ces deux valeurs, `docker compose up` échoue** (plus de fallback faible).
 
+**Auto-évaluation (Juge + Avocat du Diable) — variables optionnelles :**
+
+```bash
+# Auto-évaluation locale (désactivée par défaut, voir docker-compose.yml)
+# Ces valeurs sont déjà posées par défaut dans docker-compose.yml ;
+# ne les ajoute au .env que pour override.
+echo "AUTO_EVALUATE=false"    >> .env
+echo "EVAL_TIMEOUT_S=15"      >> .env
+echo "EVAL_NUM_PREDICT=150"   >> .env
+echo "EVAL_NUM_CTX=2048"      >> .env
+echo "EVAL_SAMPLE_RATE=1.0"   >> .env
+```
+
+> **Réglages qualité** (latence tolérée, tout est scoré sur `qwen3:14b` unique) :
+> `AUTO_EVALUATE=false` → off (sûr en prod) ; `true` → active l'auto-évaluation
+> séquentielle (Juge + Avocat du Diable). `EVAL_SAMPLE_RATE=1.0` score 100 % des
+> réponses ; `EVAL_TIMEOUT_S=15` plafonne chaque appel juge.
+
 ### 8.3 Architecture des conteneurs
 
 | Service | Image | Ports exposés | Rôle |
@@ -291,6 +314,10 @@ curl http://localhost:8001/health          # Backend
 curl http://localhost:8080/health          # Via nginx
 curl http://localhost:11436/api/tags       # Ollama (API tags)
 docker exec prof-ia-postgres-v6.0 pg_isready -U user -d prof_ia_v5
+
+# Auto-évaluation (si AUTO_EVALUATE=true)
+curl -s http://localhost:8001/health | jq .auto_evaluate
+#   → true/false selon docker-compose.yml
 ```
 
 ### 8.6 Pull des modèles LLM (Ollama) + Embeddings (BGE-M3)
@@ -313,6 +340,12 @@ ollama list
 amdgpu_top
 # La VRAM doit monter ~9 Go pour qwen3:14b
 ```
+
+> **Auto-évaluation (Juge + Avocat du Diable).** Le même modèle `qwen3:14b`
+> sert au RAG **et** à l'auto-évaluation (séquentiel, pas de chargement
+> parallèle). Pour l'activer : poser `AUTO_EVALUATE=true` dans
+> `docker-compose.yml` (ou `.env`), puis `docker compose up -d`. Désactivé par
+> défaut — calibrer sur 20 golden (Pearson r ≥ 0,7) avant activation en prod.
 
 **Modèles recommandés pour BC-250 (12 Go VRAM dispo) :**
 
@@ -570,6 +603,11 @@ docker exec prof-ia-postgres-v6.0 pg_isready -U user -d prof_ia_v5 >/dev/null &&
 
 echo -e "\n=== MODELS ==="
 ollama list
+
+echo -e "\n=== AUTO-EVAL ==="
+curl -sf http://localhost:8001/health | jq -r '.auto_evaluate // "n/a"' 2>/dev/null \
+  && echo "→ AUTO_EVALUATE lu depuis /health" \
+  || echo "AUTO_EVALUATE=$(grep -i '^AUTO_EVALUATE' .env 2>/dev/null | cut -d= -f2 || echo 'non défini')"
 
 echo -e "\n=== VRAM USAGE ==="
 grep -i vram /proc/meminfo 2>/dev/null || echo "voir amdgpu_top ci-dessus"
