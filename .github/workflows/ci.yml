@@ -41,12 +41,15 @@ jobs:
       - run: pip install pytest pytest-asyncio pytest-timeout pytest-mock
       - run: |
           pytest tests/ -v -m "not integration" --timeout=30 --strict-markers
+          rc=$?
           # Exit code 5 = no tests collected (silent false green)
           # Fail explicitly if that happens
-          if [ $? -eq 5 ]; then
+          if [ $rc -eq 5 ]; then
             echo "::error::No tests collected - check markers and test discovery"
             exit 1
           fi
+          # Propagate the real pytest exit code (test failures must stay red)
+          exit $rc
 
   lint-frontend:
     name: Lint Frontend (eslint)

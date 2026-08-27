@@ -7,20 +7,17 @@ import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
 from api.evaluation import (
+    DEVIL_ADVOCATE_SYSTEM_PROMPT,
+    JUDGE_SYSTEM_PROMPT,
     AutoEvaluationPayload,
     AutoVerdict,
     DevilAdvocateResult,
     JudgeResult,
-    call_ollama_evaluator,
-    run_evaluation,
     _aggregate,
     _run_devil_advocate,
     _run_judge,
-    DEVIL_ADVOCATE_SYSTEM_PROMPT,
-    JUDGE_SYSTEM_PROMPT,
+    run_evaluation,
 )
 
 
@@ -183,7 +180,7 @@ class TestResilience:
         assert judge.score == 0.0
 
     async def test_evaluate_response_handles_timeout_gracefully(self):
-        client = _make_client(side_effect=asyncio.TimeoutError())
+        client = _make_client(side_effect=TimeoutError())
         payload = await run_evaluation("q", "c", "r", client=client)
         # Pas de crash : verdict sûr, aucune écriture partielle (Phase 2)
         assert payload.verdict == AutoVerdict.REVIEW_NEEDED
@@ -264,7 +261,7 @@ class TestBuildIssues:
         assert issues[0]["issue_type"] == "hallucination"
         assert issues[0]["evaluation_run_id"] == "run-1"
         assert issues[0]["claim_hash"] == __import__("hashlib").sha256(
-            "Le ciel est vert.".encode()).hexdigest()
+            b"Le ciel est vert.").hexdigest()
 
     def test_build_issues_low_score_adds_low_relevance(self):
         from api.evaluation import AutoEvaluationPayload, build_issues
@@ -288,8 +285,9 @@ class TestBuildIssues:
 
 class TestEvalAfterPersist:
     async def test_waits_for_conversation_persisted(self, monkeypatch):
-        import api.main as m
         import sys
+
+        import api.main as m
 
         order = []
 
@@ -342,8 +340,9 @@ class TestEvalAfterPersist:
         assert order == ["persist", "save"]
 
     async def test_skips_when_auto_evaluate_false(self, monkeypatch):
-        import api.main as m
         import sys
+
+        import api.main as m
 
         persist_task = asyncio.create_task(asyncio.sleep(0))
         saved = []
@@ -366,8 +365,9 @@ class TestEvalAfterPersist:
         assert saved == []
 
     async def test_sample_rate_zero_skips(self, monkeypatch):
-        import api.main as m
         import sys
+
+        import api.main as m
 
         persist_task = asyncio.create_task(asyncio.sleep(0))
         saved = []
@@ -391,8 +391,9 @@ class TestEvalAfterPersist:
         assert saved == []
 
     async def test_sample_rate_one_always_runs(self, monkeypatch):
-        import api.main as m
         import sys
+
+        import api.main as m
 
         persist_task = asyncio.create_task(asyncio.sleep(0))
         saved = []

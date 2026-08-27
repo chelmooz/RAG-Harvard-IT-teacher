@@ -12,7 +12,7 @@ import hashlib
 import json
 import re
 import uuid
-from enum import Enum
+from enum import StrEnum
 
 import httpx
 from loguru import logger
@@ -23,7 +23,7 @@ from .config import get_settings
 _JSON_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 
 
-class AutoVerdict(str, Enum):
+class AutoVerdict(StrEnum):
     PASS = "pass"
     REVIEW_NEEDED = "review_needed"
     REJECT = "reject"

@@ -6,26 +6,26 @@ DIP appliqué : dépendances injectées via FastAPI Depends
 
 import asyncio
 import hashlib
-import httpx
 import secrets
 import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import httpx
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from .config import get_settings
 from .database import close_db, get_db, init_db, save_auto_evaluation, save_feedback
-from .evaluation import build_issues, run_evaluation
 from .dependencies import (
     get_document_processor as get_doc_processor_dep,
 )
 from .dependencies import (
     get_rag_engine as get_rag_engine_dep,
 )
+from .evaluation import build_issues, run_evaluation
 from .schemas import (
     ChatRequest,
     ChatResponse,
