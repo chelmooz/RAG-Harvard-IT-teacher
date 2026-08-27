@@ -26,7 +26,7 @@ def db_url():
     """URL de connexion PostgreSQL de test."""
     return os.getenv(
         "TEST_DATABASE_URL",
-        "postgresql://REDACTED_USER@localhost:5432/prof_ia_v5"
+        "postgresql://user:user@localhost:5432/prof_ia_v5"
     )
 
 
@@ -66,6 +66,16 @@ async def pool(db_url):
     except Exception as e:
         pytest.skip(f"PostgreSQL non disponible : {e}")
 
+    # 1) Connectivité : on skip uniquement si la base est absente / injoignable.
+    try:
+        async with pool.acquire() as conn:
+            await conn.fetchval("SELECT 1")
+    except Exception as e:
+        await pool.close()
+        pytest.skip(f"PostgreSQL non disponible : {e}")
+
+    # 2) Init schéma : une vraie erreur DOIT faire échouer le test (pas de skip),
+    #    sinon un bug de schéma passerait inaperçu (faux vert).
     try:
         from api.database import (
             _create_extensions,
@@ -76,9 +86,9 @@ async def pool(db_url):
             await _create_extensions(conn)
             await _create_tables(conn)
             await _create_indexes(conn)
-    except Exception as e:
+    except Exception:
         await pool.close()
-        pytest.skip(f"PostgreSQL non disponible : {e}")
+        raise
 
     yield pool
     await pool.close()
