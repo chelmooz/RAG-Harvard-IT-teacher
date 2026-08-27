@@ -52,20 +52,22 @@ via `vault/AGENTS.md` (« The Schema ») : chaque note porte sa provenance
 
 ```mermaid
 flowchart LR
+    classDef layerA fill:#e6f2ff,stroke:#1f77b4,color:#0b3d63
+    classDef layerB fill:#e8f8ec,stroke:#2ea043,color:#14532d
+    classDef shared fill:#fff4e0,stroke:#d97706,color:#7c2d12,stroke-width:2px
+
+    U[Utilisateur / Web UI]
+
     subgraph LAYERA["Couche A · Prof-IA RAG (retrieval vectoriel)"]
         direction TB
-        U[Utilisateur / Web UI]
         FE[Frontend React :3000]
         NG[Proxy Nginx :8080]
         BE[Backend FastAPI :8001]
         PG[(PostgreSQL + pgvector :5432)]
-        OL[Ollama LLM :11434<br/>Vulkan / RADV]
         EVAL[Auto-Éval<br/>Juge + Avocat du Diable<br/>séquentiel · qwen3:14b]
-        U --> FE --> NG --> BE
+        FE --> NG --> BE
         BE --> PG
-        BE --> OL
-        BE --> EVAL
-        EVAL --> OL
+        BE -.->|tâche de fond| EVAL
         EVAL --> PG
     end
 
@@ -73,50 +75,78 @@ flowchart LR
         direction TB
         V[Vault Obsidian vault/]
         EX["Exécuteur :<br/>plugin karpathywiki<br/>OU OpenCode"]
-        M[Modèles locaux FREE<br/>OpenAI-compatible :11436]
-        V --> EX --> M
+        V --> EX
     end
 
-    LAYERA -->|"Modèle 3 :<br/>le RAG indexe aussi<br/>vault/wiki/** + raw/"| PG
-    OL -. "modèles locaux<br/>partagés" .- M
+    OL{{"Ollama LLM<br/>:11434 → :11436<br/>Vulkan / RADV<br/>(instance unique partagée)"}}
+
+    U --> FE
+    BE --> OL
+    EVAL --> OL
+    EX --> OL
+    V -.->|"Modèle 3 :<br/>indexé aussi par la Couche A"| PG
+
+    class U,FE,NG,BE,PG,EVAL layerA
+    class V,EX layerB
+    class OL shared
 ```
 
 **Flux d'une requête RAG**
 
 ```mermaid
 sequenceDiagram
+    autonumber
     participant U as Utilisateur
     participant FE as Frontend (:3000)
     participant BE as Backend (:8001)
     participant PG as pgvector
     participant OL as Ollama
+
     U->>FE: Question (mode : précis / explore / synthèse)
     FE->>BE: POST /chat
+    activate BE
     BE->>PG: Embed requête + recherche similarité
     PG-->>BE: top-k chunks
     BE->>OL: Prompt + contexte
     OL-->>BE: Réponse
-    BE->>BE: _persist_conversation (tâche async)
-    BE->>BE: _eval_after_persist (attendre persist)
-    BE->>OL: Prompt Juge (format=json, temp=0)
-    OL-->>BE: JudgeResult (fidélité + pertinence)
-    BE->>OL: Prompt Avocat du Diable (format=json, temp=0)
-    OL-->>BE: DevilAdvocateResult (claims non sourcés)
-    BE->>PG: save_auto_evaluation + response_issues
     BE-->>U: Réponse + citations
+    deactivate BE
+
+    rect rgb(245, 245, 245)
+        note over BE,PG: Tâches de fond (asyncio.create_task) — non bloquantes
+        BE->>PG: _persist_conversation
+        BE->>OL: Prompt Juge (format=json, temp=0)
+        OL-->>BE: JudgeResult (fidélité + pertinence)
+        BE->>OL: Prompt Avocat du Diable (format=json, temp=0)
+        OL-->>BE: DevilAdvocateResult (claims non sourcés)
+        BE->>PG: save_auto_evaluation + response_issues
+    end
 ```
 
 **Flux de maintenance du LLM Wiki (exécuteur agnostique)**
 
 ```mermaid
 flowchart TB
-    S[Docs source dans raw/<br/>ou sortie PIPE]
+    classDef src fill:#f5f5f5,stroke:#666
+    classDef exec fill:#e8f8ec,stroke:#2ea043
+    classDef out fill:#e6f2ff,stroke:#1f77b4
+    classDef model fill:#fff4e0,stroke:#d97706
+
+    S[Docs source dans raw/<br/>ou sortie PIPE]:::src
     S --> ING{{Ingest / Consolidate}}
-    ING -->|plugin karpathywiki| KB[(notes wiki/)]
-    ING -->|agent OpenCode| KB
-    KB --> Q[Query wiki]
-    KB --> L[Lint + Smart Fix]
-    Q --> M[Modèle local FREE :11436]
+
+    subgraph EXEC["Exécuteur — au choix"]
+        direction LR
+        E1[plugin karpathywiki]:::exec
+        E2[agent OpenCode]:::exec
+    end
+
+    ING --> EXEC
+    EXEC --> KB[(notes wiki/)]:::out
+    KB --> Q[Query wiki]:::out
+    KB --> L[Lint + Smart Fix]:::out
+    M[Modèle local FREE :11436]:::model
+    Q --> M
     L --> M
 ```
 
