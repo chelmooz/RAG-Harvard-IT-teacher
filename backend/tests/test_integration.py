@@ -184,6 +184,21 @@ class TestEndToEnd:
     @pytest.mark.asyncio
     async def test_upload_index_query(self, api_token, base_url):
         """Upload d'un fichier texte → indexation → query → chunks_retrieved > 0."""
+        import socket
+        from urllib.parse import urlparse
+
+        parsed = urlparse(base_url)
+        host = parsed.hostname or "localhost"
+        port = parsed.port or 8001
+        try:
+            with socket.create_connection((host, port), timeout=3):
+                pass
+        except OSError:
+            pytest.skip(
+                f"Backend E2E non disponible sur {base_url} — test ignoré "
+                f"(aucun serveur démarré en CI)"
+            )
+
         import httpx
 
         content = (

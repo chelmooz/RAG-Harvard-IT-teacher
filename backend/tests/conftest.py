@@ -42,11 +42,6 @@ sys.modules["openpyxl"] = MagicMock()
 sys.modules["docx"] = MagicMock()
 sys.modules["pptx"] = MagicMock()
 sys.modules["pypdf"] = MagicMock()
-sys.modules["httpx"] = MagicMock(AsyncClient=MagicMock(return_value=MagicMock(
-    post=MagicMock(return_value=MagicMock(raise_for_status=MagicMock(), json=lambda: {"response": "mocked"})),
-    get=MagicMock(return_value=MagicMock(raise_for_status=MagicMock())),
-    aclose=MagicMock(),
-)))
 
 # Imports after sys.modules mocking (required for heavy dependency mocking)
 import asyncio  # noqa: E402
