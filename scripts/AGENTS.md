@@ -5,26 +5,28 @@
 ## Structure
 ```
 scripts/
-├── bazzite/                 # BC‑250 research toolkit (source from external repo)
-│   ├── install.sh           # Full setup (driver, unlock, OC)
+├── bazzite/                 # BC‑250 setup for Bazzite (rpm-ostree)
+│   ├── setup.sh             # Full setup BC‑250 sur Bazzite (rpm-ostree)
 │   └── README.md            # Usage guide
-├── bc250/                   # Direct BC‑250 helpers
+├── bc250/                   # Direct BC‑250 helpers (userspace, Bazzite)
+│   ├── 40cu-unlock/         # 40 CU unlock via UMR (bc250-cu-live-manager.sh)
+│   ├── smu-oc/              # CPU UV/OC via SMU
+│   ├── core-unlock/         # 8‑core unlock
 │   └── unlock_helper.py     # Python wrapper around SMU tools
-├── check_long_lines.py      # Linter for line length (>120 chars)
-└── unlock-40cu.sh           # Shell script to unlock 40 CUs on BC‑250 GPU
+└── check_long_lines.py      # Linter for line length (>120 chars)
 ```
 
 ## Where to Look
 | Task | Location | Notes |
 |------|------------|-------|
-| Unlock additional GPU CUs | `scripts/bc250/unlock_helper.py` | Run with elevated privileges |
+| Unlock additional GPU CUs | `scripts/bc250/40cu-unlock/bc250-cu-live-manager.sh` | UMR‑based, no kernel rebuild |
 | Batch‑process line length violations | `scripts/check_long_lines.py` | Fails on files >120 characters |
-| Automate GPU unlock at boot | `scripts/unlock-40cu.sh` | Hook into systemd service |
+| CPU UV/OC via SMU | `scripts/bc250/smu-oc/bc250_apply.py` | Run with elevated privileges |
 
 ## Code Map
 - **Unlock logic**: `scripts/bc250/unlock_helper.py` → calls `smu_tool` binary
+- **40 CU unlock**: `scripts/bc250/40cu-unlock/bc250-cu-live-manager.sh` → UMR (no rebuild)
 - **Line‑length checker**: `scripts/check_long_lines.py` → uses `flake8` under the hood
-- **Shell unlock**: `scripts/unlock-40cu.sh` → writes to `/sys/kernel/debug/clock_force` (if enabled)
 
 ## Conventions
 - Scripts are idempotent where possible.
@@ -42,12 +44,8 @@ scripts/
 # Run line‑length audit
 python scripts/check_long_lines.py .
 
-# Unlock extra CUs (requires sudo)
-sudo scripts/bc250/unlock_helper.py --cu-count 40
-
-# Apply unlock script at boot (systemd)
-sudo cp scripts/unlock-40cu.sh /usr/local/bin/
-sudo systemctl enable unlock-40cu.service
+# Unlock extra CUs via UMR (requires sudo, no kernel rebuild)
+sudo scripts/bc250/40cu-unlock/bc250-cu-live-manager.sh
 ```
 
 ## Notes

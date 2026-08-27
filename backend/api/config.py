@@ -75,13 +75,13 @@ class Settings(BaseSettings):
     # plafond kernel est posé via ttm.pages_limit=3014656 (Bazzite :
     # `rpm-ostree kargs --append-if-missing="ttm.pages_limit=3014656"`) +
     # UMA_SIZE=512 Mo (CMOS bc250memcfg) → split serveur 12 Go GPU / 4 Go CPU
-    # (cf. install.sh étape 3/9 et vault/docs/superpowers/specs/
+    # (cf. vault/docs/superpowers/specs/
     # 2026-08-26-bc250-bazzite-deployment.md). Le triplet
     # gttsize=14750/pages_limit/page_pool_size=3959290 (~15 Go) est ÉVITÉ :
     # il pomperait la RAM CPU sur un système unifié 16 Go.
     AMD_GTT_SIZE_MB:          int = 12288
     # 24 = stock (16 CUs fusionnés en firmware). Après déblocage 40 CU
-    # (scripts/unlock-40cu.sh, cf. install.sh étape 9/9), passer à 40
+    # (déblocage 40 CU via UMR, cf. scripts/bc250/40cu-unlock/bc250-cu-live-manager.sh), passer à 40
     # dans .env — NE JAMAIS mettre 40 ici sans avoir vérifié au préalable
     # `sudo dmesg | grep active_cu_number` (doit afficher 40, pas 24).
     AMD_RDNA2_CUS:            int = 24

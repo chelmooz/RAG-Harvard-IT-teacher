@@ -239,7 +239,7 @@ RAG-Harvard-IT-teacher/
 ├── frontend/                 # React UI (Terminal / Dashboard / Minimal)
 ├── config/nginx.conf         # Reverse proxy
 ├── fine_tuning/              # LoRA training (train.py, config.yaml)
-├── scripts/                  # unlock-40cu.sh, check_long_lines.py
+├── scripts/                  # check_long_lines.py, bc250 helpers (Bazzite)
 ├── AMD-BC-250-at-his-Best/   # Vendored bc250-beast toolkit (HW unlock/OC)
 ├── vault/                    # ← Layer B: LLM Wiki vault (Modèle 3 + OKF)
 │   ├── AGENTS.md             # The Schema
@@ -316,9 +316,11 @@ server guide <https://github.com/akandr/bc250>.
 | System tuning | zswap, mitigations off, MangoHud |
 | Recommended OS | **Bazzite** (immutable Fedora) — first-class support |
 
-> **Install paths (BC-250).** Two supported routes, pick one:
-> - **Bazzite** (recommended): `scripts/bazzite/setup.sh` (rpm-ostree kargs, governor COPR, env ROCm). Userspace BC-250 optimizations live in `scripts/bc250/` (40 CU via UMR, 8c unlock + UV/OC via SMU — all MIT, see `CREDITS.md`).
-> - **Debian 13 / ROCm 7.2**: `install.sh` (apt + GRUB). *Not* for immutable Bazzite.
+> **Install path (BC-250).** Recommended route:
+> - **Bazzite** (immutable Fedora, first-class): `scripts/bazzite/setup.sh`
+>   (rpm-ostree kargs, governor COPR, env ROCm). Userspace BC-250 optimizations
+>   live in `scripts/bc250/` (40 CU via UMR, 8c unlock + UV/OC via SMU — all MIT,
+>   see `CREDITS.md`).
 >
 > 📘 **Full step-by-step install guide** (BIOS flash, BIOS settings, Bazzite install, driver
 > config, service verification): [`BC-250-INSTALL-GUIDE.md`](BC-250-INSTALL-GUIDE.md).

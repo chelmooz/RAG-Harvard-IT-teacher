@@ -2,7 +2,7 @@
 # =============================================================================
 # Prof IA v6.0 — Setup BC-250 sur BAZZITE (Fedora immuable, rpm-ostree)
 # -----------------------------------------------------------------------------
-# OS « first-class » recommandé (README §8.1). Pour Debian/ROCm, voir install.sh.
+# OS « first-class » recommandé (README §8.1).
 #
 # Phase 1 (userspace, AUCUN rebuild noyau) :
 #   - Split RAM/VRAM serveur (12 Go GPU / 4 Go CPU)

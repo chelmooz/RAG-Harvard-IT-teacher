@@ -240,7 +240,7 @@ RAG-Harvard-IT-teacher/
 ├── frontend/                 # UI React (Terminal / Dashboard / Minimal)
 ├── config/nginx.conf         # Reverse proxy
 ├── fine_tuning/              # Entraînement LoRA (train.py, config.yaml)
-├── scripts/                  # unlock-40cu.sh, check_long_lines.py
+├── scripts/                  # check_long_lines.py, bc250 helpers (Bazzite)
 ├── AMD-BC-250-at-his-Best/   # Toolkit bc250-beast inclus (déblocage/OC matériel)
 ├── vault/                    # ← Couche B : vault LLM Wiki (Modèle 3 + OKF)
 │   ├── AGENTS.md             # The Schema
