@@ -62,7 +62,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: npm ci --silent
+      - run: npm ci
       - run: npx eslint src/ --ext .js,.jsx
 
   test-frontend:
@@ -76,7 +76,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: npm ci --silent
+      - run: npm ci
       - run: npx react-scripts test --watchAll=false --passWithNoTests
 
   test-integration:
@@ -116,8 +116,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Generate .env for compose interpolation
-        run: |
-          cp .env.example .env
-          python3 -c "import secrets; open('.env','a').write('POSTGRES_PASSWORD=' + secrets.token_urlsafe(24) + '\n')"
-          python3 -c "import secrets; open('.env','a').write('API_TOKEN=' + secrets.token_urlsafe(32) + '\n')"
+        run: cp .env.example .env
       - run: docker compose build

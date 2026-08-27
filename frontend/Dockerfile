@@ -8,11 +8,14 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Dépendances
-COPY package*.json ./
-RUN npm ci --silent
+COPY package*.json .npmrc ./
+RUN npm ci --legacy-peer-deps
 
 # Build de production
+# react-scripts (webpack 5) échoue sur Node ≥17 / OpenSSL 3 avec
+# "digital envelope routines::unsupported" → on force le legacy provider.
 COPY . .
+ENV NODE_OPTIONS=--openssl-legacy-provider
 RUN npm run build
 
 # ── Image de production (nginx statique) ──────────────────────────────────────

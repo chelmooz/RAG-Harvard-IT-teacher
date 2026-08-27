@@ -9,20 +9,6 @@ const INIT_MESSAGES = [
   { role: 'sys', text: '[SYS] ctOS_RAG v6.0 initialized. Local knowledge base loaded.' },
 ];
 
-const userBubble = {
-  background: 'rgba(0,229,204,0.06)',
-  border: '1px solid rgba(0,229,204,0.2)',
-  padding: '12px 16px', maxWidth: '55%',
-};
-
-const ragBubble = {
-  background: 'rgba(0,229,204,0.03)',
-  border: '1px solid rgba(0,229,204,0.15)',
-  padding: 16, maxWidth: '65%',
-};
-
-
-
 function Sidebar({ health, docStats, nav }) {
   const sessionStyle = {
     fontSize: 12, color: 'rgba(255,255,255,0.5)',

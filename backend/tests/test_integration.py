@@ -44,7 +44,7 @@ def api_token():
 
 @pytest_asyncio.fixture
 async def pool(db_url):
-    """Crée un pool de test vers PostgreSQL de test (codecs enregistrés)."""
+    """Crée un pool de test vers PostgreSQL de test (codecs + schéma initialisés)."""
     import asyncpg
     try:
         from pgvector.asyncpg import register_vector
@@ -63,10 +63,25 @@ async def pool(db_url):
         pool = await asyncpg.create_pool(
             db_url, min_size=1, max_size=2, command_timeout=10, init=_init
         )
-        yield pool
-        await pool.close()
     except Exception as e:
         pytest.skip(f"PostgreSQL non disponible : {e}")
+
+    try:
+        from api.database import (
+            _create_extensions,
+            _create_indexes,
+            _create_tables,
+        )
+        async with pool.acquire() as conn:
+            await _create_extensions(conn)
+            await _create_tables(conn)
+            await _create_indexes(conn)
+    except Exception as e:
+        await pool.close()
+        pytest.skip(f"PostgreSQL non disponible : {e}")
+
+    yield pool
+    await pool.close()
 
 
 class TestDatabaseIntegration:

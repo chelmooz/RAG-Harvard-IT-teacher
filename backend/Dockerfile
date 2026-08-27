@@ -32,9 +32,13 @@ WORKDIR /app
 COPY requirements.txt .
 
 # PyTorch — sélection ROCm ou CPU via --build-arg USE_ROCM=true
+# En CI (sans GPU) l'index ROCm peut ne proposer que des wheels nightly ;
+# on retombe donc sur le build CPU fiable si l'install ROCm échoue.
 RUN if [ "$USE_ROCM" = "true" ]; then \
         pip install --no-cache-dir torch torchvision torchaudio \
-            --index-url https://download.pytorch.org/whl/rocm7.2; \
+            --index-url https://download.pytorch.org/whl/rocm7.2 || \
+        pip install --no-cache-dir torch torchvision torchaudio \
+            --index-url https://download.pytorch.org/whl/cpu; \
     else \
         pip install --no-cache-dir torch torchvision torchaudio \
             --index-url https://download.pytorch.org/whl/cpu; \
