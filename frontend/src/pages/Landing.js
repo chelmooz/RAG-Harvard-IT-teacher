@@ -1,9 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { S } from '../styles/shared';
 
-export default function Landing() {
-  const nav = useNavigate();
-  const badgeStyle = {
+const badgeStyle = {
   marginBottom: 40, padding: '6px 16px',
   border: '1px solid rgba(0,229,204,0.3)',
   fontSize: 11, letterSpacing: 3,

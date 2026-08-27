@@ -79,3 +79,4 @@ Format OKF : `## YYYY-MM-DD — action`.
   S6 `pyproject.toml` build-backend. Vérif : py_compile OK, pytest collect 7 tests OK.
 - Harvest MIT `scripts/bc250/` (WinnieLV 40cu, bc250-collective smu-oc, keyboardspecialist 8c) ; clones
   `bc250-sources/` supprimés ; `CREDITS.md` + README §10 remerciements.
+- Added documentation AGENTS.md files for each top-level directory (backend, frontend, config, scripts, experimental). Human participant identified as `human:michel`.

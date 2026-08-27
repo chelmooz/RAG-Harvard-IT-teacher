@@ -1,0 +1,55 @@
+# =============================================================================
+# Prof IA v6.0 — Configuration Fine-tuning QLoRA (AMD BC-250)
+# =============================================================================
+# USAGE : python train.py  (depuis le répertoire fine_tuning/)
+# Prérequis : arrêter Ollama avant (systemctl stop ollama) pour libérer la VRAM
+
+database:
+  # URL PostgreSQL 18.2 (même instance que le backend)
+  # OBLIGATOIRE : définir FINE_TUNING_DB_URL dans l'environnement
+  # Exemple : postgresql://user:${POSTGRES_PASSWORD}@localhost:5432/prof_ia_v5
+  url: "${FINE_TUNING_DB_URL}"
+
+model:
+  # Modèle de base à fine-tuner : doit MATCHER le modèle servi (qwen3:14b).
+  # Qwen3-14B en QLoRA 4-bit ≈ 8 Go VRAM → tient dans les 12 Go BC-250.
+  # (fp16 plein precision ≈ 28 Go ne tient PAS ; d'où le 4-bit obligatoire)
+  # IMPORTANT : arrêter Ollama avant de lancer le fine-tuning !
+  base_model: "Qwen/Qwen3-14B"
+  # Répertoire de sortie du modèle LoRA adapté
+  output_dir: "/app/models/qwen3-prof-ia-lora"
+
+dataset:
+  # Nombre max d'exemples Golden à récupérer depuis PostgreSQL
+  # Augmenter progressivement (100 → 250 → 500) selon les résultats
+  limit: 500
+  # Score minimum pour inclure un exemple dans le dataset
+  min_score: 0.85
+
+lora:
+  # Rang LoRA — 16 = bon compromis expressivité/VRAM pour BC-250
+  # Augmenter à 32 si le dataset > 300 exemples et VRAM suffisante
+  r: 16
+  alpha: 32
+  # Modules cibles pour Qwen3 (architecture transformer)
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+  dropout: 0.05
+
+training:
+  output_dir: "/app/models/qwen3-prof-ia-lora"
+  num_epochs: 3
+  # batch_size=1 obligatoire avec 12 Go VRAM (LoRA fp16 sur Qwen3-14B)
+  # gradient_accumulation_steps=8 simule un batch effectif de 8
+  batch_size: 1
+  gradient_accumulation_steps: 8
+  learning_rate: 0.0002   # 2e-4 standard pour QLoRA
+  save_steps: 50
+  logging_steps: 10
+  warmup_steps: 20

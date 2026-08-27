@@ -217,7 +217,7 @@ export default function Dashboard() {
                     onMouseLeave={onLeave}>
                   <span style={{ color: 'rgba(0,229,204,0.4)', fontSize: 11 }}>▣</span> {s}
                 </div>
-              ))}
+              )})}
             </div>
           </div>
 
