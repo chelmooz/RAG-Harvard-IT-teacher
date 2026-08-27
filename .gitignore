@@ -49,3 +49,6 @@ docker-compose.override.yml
 
 # Logs
 *.log
+
+# Session / local agent state (never push to remote)
+.omo/
