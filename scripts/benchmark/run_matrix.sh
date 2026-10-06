@@ -17,7 +17,9 @@ REQUESTS="${FIT_REQUESTS:-10}"
 # project files, and must not pollute the deployment repo's git status.
 OUT="${FIT_OUT:-$HOME/profia-fit-artifacts}"
 LLAMA_BIN="${FIT_LLAMA_BIN:-/opt/llama.cpp/build/bin/llama-server}"
-MODEL_PATH="${FIT_MODEL_PATH:-/var/lib/profia-llama/models/google_gemma-4-26B-A4B-it-IQ3_XS.gguf}"
+# Candidate for the pre-deployment qualification campaign, not a production
+# validation. See docs/architecture/PROF-IA-v1.4-master.md.
+MODEL_PATH="${FIT_MODEL_PATH:-/var/lib/profia-llama/models/Qwen2.5-7B-Instruct-Q6_K.gguf}"
 BASE_PORT="${FIT_BASE_PORT:-8081}"
 HEALTH_TIMEOUT="${FIT_HEALTH_TIMEOUT:-60}"
 

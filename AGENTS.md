@@ -1,80 +1,62 @@
-# PROJECT KNOWLEDGE BASE
+# AGENTS.md — PROF-IA
 
-**Generated:** 2026-08-27
-**Commit:** bbac4a0
-**Branch:** feat/auto-eval-rag
+Point d'entrée pour tout agent ou humain qui travaille sur ce dépôt.
+**Avant d'agir, lire `docs/architecture/PROF-IA-v1.4-master.md`.**
 
-## OVERVIEW
-This repository implements a fully local Retrieval‑Augmented Generation (RAG) teaching assistant for IT curricula (TSSR / AIS / DevOps). It combines a vector‑retrieval engine with a compiled LLM‑Wiki knowledge vault, adhering to OKF provenance principles and running entirely on premises.
+## Hiérarchie documentaire
 
-## STRUCTURE
-```
-├── backend/                # FastAPI RAG engine, document processors, evaluation tests
-├── frontend/               # React UI (terminal, dashboard, minimal)
-├── config/                 # Nginx reverse‑proxy configuration
-├── scripts/                # Helper scripts (unlock, line checks, etc.)
-├── experimental/           # Experimental features and fine‑tuning notebooks
-├── vault/                  # Layer B – LLM Wiki knowledge vault (Modèle 3)
-│   ├── AGENTS.md           # The Schema (OKF front‑matter rules)
-│   └── wiki/               # Generated knowledge notes
-├── vault/raw/              # Drop folder for source documents
-└── vault/log.md            # OKF maintenance log
-```
+Seul le premier niveau fait autorité. Un niveau inférieur qui contredit un
+niveau supérieur est un défaut, pas une variante.
 
-## WHERE TO LOOK
-| Task | Location | Notes |
-|------|----------|-------|
-| Run the RAG stack | `docker compose up -d` (root) | Exposes UI at `localhost:3000` |
-| Inspect embeddings | `vault/raw/` and `vault/wiki/` | PDFs, MD, DOCX, CSV ingestion pipelines |
-| View knowledge base | `vault/wiki/` | Linked, source‑cited notes |
-| Extend architecture | `backend/`, `frontend/` | Follow modular FastAPI / React patterns |
-| Add hardware notes | `experimental/` | BC‑250 unlock & OC procedures |
+| Niveau | Emplacement | Autorité |
+|---|---|---|
+| **1 — Normatif** | `docs/architecture/PROF-IA-v1.4-master.md` | Source de vérité |
+| **1 — Décisions** | `docs/architecture/adr/ADR-*.md` | Justifie le maître, ne le remplace pas |
+| 2 — Cadre de travail | `knowledge/AGENTS.md` | Règles du bundle de connaissance |
+| 3 — Référence | `docs/legacy/` | Patrimoine. **Ne pas appliquer.** |
+| 3 — Patrimoine | dépôt `RAG-Harvard-IT-teacher` | Source fonctionnelle de la migration |
 
-## CODE MAP
-The code base follows a modular FastAPI + React layout:
+## Règles qui ne se négocient pas
 
-- **Backend**: `backend/api/` contains `main.py`, `rag_engine/`, `database.py`, `document_processor/`, `evaluation.py`.
-- **Frontend**: `frontend/src/` hosts the React components, routed via Nginx.
-- **Embedding model**: `BAAI/bge-m3` (1024‑dim) selected for French‑language MTEB suitability.
-- **LLM model**: `qwen3:14b` served via Ollama on `127.0.0.1:11434` (exposed as `:11436`).
+1. **Vulkan uniquement, jamais CUDA.** Mesa/RADV écrit ses shaders en mémoire
+   exécutable : `MemoryDenyWriteExecute=true` dans un service systemd **casse**
+   l'initialisation Vulkan. Ne jamais l'ajouter.
+2. **Jamais `172.17.0.1`.** L'adresse du bridge `docker0` n'est pas garantie.
+   Utiliser le réseau déclaré `profia-llama` et la résolution `host-gateway`.
+3. **Mesurer, ne pas seuiller.** Aucun seuil de débit, mémoire ou température ne
+   conditionne une décision. `scripts/benchmark/fit_campaign.sh` rend un verdict
+   par configuration et **n'encode aucun seuil**.
+4. **`confidence_level` est un enum de chaînes**, jamais un flottant présenté
+   comme probabilité.
+5. **Jamais de provenance inventée.** Une citation doit exister dans le contexte
+   fourni et pointer vers une source traçable.
+6. **Caractérisation = lecture seule.** Le banc ne modifie ni TTM, ni kernel,
+   ni voltage, ni CU, ni `/sys`, ni `/proc`.
 
-Only the back‑end imports `vault/` for OKF provenance; the front‑end never accesses raw files.
+## Ce qui n'est pas établi
 
-## CONVENTIONS
-- **Strict typing** (`pydantic` v2) across all Python modules.
-- **Code formatting** enforced by `ruff` (line length 120) and `pre‑commit`.
-- **Testing**: all evaluation logic lives under `backend/tests/`, run with `pytest`.
-- **Documentation**: markdown files in root and `Prof-IA-v5-Documentation-BC250.md`.
-- **Hardware notes** kept in `experimental/` and `BC-250-INSTALL-GUIDE.md`.
+Le matériel **n'a pas été qualifié**. Ne pas traiter comme acquis :
 
-## ANTI-PATTERNS (THIS PROJECT)
-- **Hard‑coded API keys** – prohibited; all secrets go through `.env.example` and runtime injection.
-- **Partial or disabled implementations** – components must be complete or removed.
-- **Excessive logging** – only structured JSON logs; avoid verbose console output.
-- **Non‑deterministic sleeps or polling** – use `monitor`/`task` notifications instead.
-- **Direct file system writes without atomic ops** – use `tempfile` and rename.
+- le noyau 6.18 (Debian 13 livre 6.12) et Mesa ≥ 25.1 (peut exiger
+  backports/experimental) — voir [ADR-001](docs/architecture/adr/ADR-001-debian13.md) ;
+- les 40 CU — à qualifier, le dépôt amont du patch noyau ayant été archivé ;
+- le budget mémoire réel : 12,44 Go sur 16 Go est une **hypothèse**, pas une
+  mesure. Voir l'annexe A du maître.
 
-## UNIQUE STYLES
-- **Markdown with front‑matter** for every knowledge note; `[[wiki-links]]` for provenance.
-- **Reusable UI components** that accept theme props for dark / light mode.
-- **Context‑aware prompts** that embed retrieval results directly into the LLM call.
+## État
 
-## COMMANDS
-```bash
-# Launch full stack
-docker compose up -d
+| Gate | Sujet | État |
+|---|---|---|
+| T0.-1 | Protocole de caractérisation | GREEN (76 tests) |
+| T0.-1 réel | Campagne du candidat sur BC-250 | non lancée |
+| G0 | Documentation | ce commit |
+| G1+ | Plateforme, mémoire, RAG, OKF, Laya, E2E | non ouverts |
 
-# Run test suite
-python -m pytest backend/tests/
+Le backend applicatif n'existe pas encore. Ne pas supposer l'existence de
+`docker-compose.yml`, `pyproject.toml`, `.env.example` ou d'un `backend/app/`.
 
-# Pull the base LLM model
-ollama pull qwen3:14b
+## Le bac `/work` n'est pas la référence
 
-# Ingest a new document
-curl -F "file=@path/to/doc.pdf" http://localhost:8001/documents/upload
-```
-
-## NOTES
-- **Hardware target**: AMD BC‑250 (Cyan Skillfish) with up to 40 unlocked CUs and 8 CPU cores; see `BC-250-INSTALL-GUIDE.md` for unlock and OC steps.
-- **Model context**: `num_ctx` set to 8192 for deep RAG workloads, 1024 for quick vault queries.
-- **Auto‑evaluation**: after each `/chat` response the backend can trigger a sequential Judge + Devil’s Advocate run on the same `qwen3:14b` model (controlled by `AUTO_EVALUATE` flag).
+`/work/profia-t0-1/` contient le banc GHOST/MONKEY et les 76 tests. Il sert à
+**éprouver** le protocole, pas à définir l'architecture. En cas de divergence,
+le maître de ce dépôt l'emporte.

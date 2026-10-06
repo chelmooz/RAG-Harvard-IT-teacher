@@ -1,3 +1,10 @@
+> **⚠️ LEGACY — document de la v6 (avant migration PROF IA v1.4).**
+> Il décrit l'ancien système : Ollama, `qwen3:14b`, Bazzite, Judge et
+> Devil's Advocate. **Ce n'est plus la cible.**
+> Référence actuelle : [`../../AGENTS.md`](../../AGENTS.md) et
+> [`../../docs/architecture/PROF-IA-v1.4-master.md`](../../docs/architecture/PROF-IA-v1.4-master.md).
+> Conservé sans modification comme patrimoine de migration.
+
 # RAG-Harvard-IT-teacher
 
 > **Prof-IA** — un assistant RAG d'enseignement **100 % local** pour les

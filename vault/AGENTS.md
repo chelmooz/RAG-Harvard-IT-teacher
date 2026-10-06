@@ -1,3 +1,9 @@
+> **⚠️ LEGACY — schéma du vault v6, avant migration PROF IA v1.4.**
+> Il prescrit **Ollama** et **`qwen3:14b`** comme moteurs locaux : c'est caduc.
+> Le bundle de connaissance canonique est `knowledge/` (OKF v0.2), règles dans
+> [`../knowledge/AGENTS.md`](../knowledge/AGENTS.md).
+> Ce fichier est conservé tel quel comme patrimoine de migration.
+
 # SCHEMA — Vault LLM Wiki (`karpathywiki` / OpenCode + Modèle 3 + OKF)
 
 Vault Obsidian de **connaissances compilées auto-maintenues par IA**, exécuté par le plugin

@@ -1,0 +1,89 @@
+[Unit]
+Description=PROF-IA llama.cpp server (Qwen2.5-7B-Instruct Q6_K candidate)
+Documentation=https://github.com/ggml-org/llama.cpp
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=llama
+Group=llama
+SupplementaryGroups=render
+
+# Répertoire de travail = dossier contenant le binaire
+WorkingDirectory=/opt/llama.cpp/build/bin
+
+# Variables d'environnement critiques
+Environment="MODEL_FILE=Qwen2.5-7B-Instruct-Q6_K.gguf"
+Environment="MODEL_DIR=/var/lib/profia-llama/models"
+Environment="LLAMA_HOST_IP=172.30.50.1"
+Environment="LLAMA_PORT=8081"
+# Forcer le driver Vulkan RADV (évite conflits si NVIDIA/AMD coexistent)
+Environment="VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/radeon_icd.x86_64.json"
+# Allocateur Vulkan plus stable pour gros modèles
+Environment="VK_DRIVER_FILES=/usr/share/vulkan/icd.d/radeon_icd.x86_64.json"
+
+# Pré-conditions : réseau Docker dédié + gateway + modèle lisible
+ExecStartPre=/bin/bash -c 'docker network inspect profia-llama >/dev/null 2>&1 || { echo "Réseau Docker profia-llama introuvable"; exit 1; }'
+ExecStartPre=/bin/bash -c 'ip -4 addr show | grep -q "172.30.50.1/24" || { echo "Gateway 172.30.50.1 absente sur l hôte"; exit 1; }'
+ExecStartPre=/bin/bash -c 'test -r "${MODEL_DIR}/${MODEL_FILE}" || { echo "Modèle introuvable: ${MODEL_DIR}/${MODEL_FILE}"; exit 1; }'
+
+# Commande principale
+# -ngl 999 = offload max GPU (Vulkan), retombe en CPU si VRAM insuffisante
+# -c 8192 = contexte initial 8K (passer à 16384 après validation mémoire)
+# -ctk q4_0 -ctv q4_0 = KV cache quantifié Q4_0 (économie mémoire)
+# -fa on = Flash Attention (si supporté par le driver)
+# -b 512 -ub 512 = batch logique/physique conservateur
+# -np 1 = une requête à la fois (pas de parallélisme)
+# --jinja = template ChatML/Jinja du modèle (Qwen2.5 utilise ChatML)
+ExecStart=/opt/llama.cpp/build/bin/llama-server \
+  -m ${MODEL_DIR}/${MODEL_FILE} \
+  --host ${LLAMA_HOST_IP} \
+  --port ${LLAMA_PORT} \
+  -ngl 999 \
+  -c 8192 \
+  -ctk q4_0 \
+  -ctv q4_0 \
+  -fa on \
+  -b 512 \
+  -ub 512 \
+  -np 1 \
+  --jinja
+
+# Redémarrage & limites
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=0
+TimeoutStopSec=30
+LimitNOFILE=65536
+LimitMEMLOCK=infinity
+KillSignal=SIGINT
+
+# Sécurité (défense en profondeur)
+#
+# MemoryDenyWriteExecute est VOLONTAIREMENT ABSENT.
+# Mesa/RADV compile les shaders Vulkan en mémoire exécutable (JIT via LLVM/NIR).
+# Poser MemoryDenyWriteExecute=true rend la mémoire non inscriptible ET non
+# exécutable : le pilote ne peut pas produire ses pipelines, l'initialisation
+# Vulkan échoue et llama-server ne démarre pas sur GPU.
+# Voir docs/architecture/PROF-IA-v1.4-master.md (contrainte Vulkan).
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# Répertoire d'état pour logs/runtime
+StateDirectory=profia-llama
+LogsDirectory=profia-llama
+
+[Install]
+WantedBy=multi-user.target

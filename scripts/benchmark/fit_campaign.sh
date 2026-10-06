@@ -27,7 +27,7 @@ LABEL=""; CTX=""; KV=""; NGL=""; REQUESTS=10
 HOST="127.0.0.1"; PORT=8081
 # Candidate model for the pre-deployment qualification campaign.
 # Not a production validation: see docs/architecture/PROF-IA-v1.4-master.md.
-MODEL_PATH="/var/lib/profia-llama/models/google_gemma-4-26B-A4B-it-IQ3_XS.gguf"
+MODEL_PATH="${FIT_MODEL_PATH:-/var/lib/profia-llama/models/Qwen2.5-7B-Instruct-Q6_K.gguf}"
 MODEL_NAME=""
 LLAMA_BIN="${FIT_LLAMA_BIN:-/opt/llama.cpp/build/bin/llama-server}"
 SYS_ROOT="${FIT_SYS_ROOT:-}"
@@ -46,6 +46,7 @@ while [ $# -gt 0 ]; do
     --host)       HOST="${2-}"; shift 2 ;;
     --port)       PORT="${2-}"; shift 2 ;;
     --model-path) MODEL_PATH="${2-}"; shift 2 ;;
+    --model-name) MODEL_NAME="${2-}"; shift 2 ;;
     --llama-bin)  LLAMA_BIN="${2-}"; shift 2 ;;
     *) printf 'unknown argument: %s\n' "$1" >&2; exit 64 ;;
   esac
@@ -71,6 +72,8 @@ command -v awk   >/dev/null || die "awk is required" 65
 # The OpenAI-compatible "model" field identifies the candidate in the request
 # and in the report. Derive it from the real file so it cannot drift from what
 # is actually loaded.
+[ -n "$MODEL_NAME" ] || MODEL_NAME=$(basename "$MODEL_PATH" .gguf)
+MODEL_SIZE_BYTES=$(stat -c%s "$MODEL_PATH" 2>/dev/null || echo null)
 
 WORK="${TMPDIR:-/tmp}/fit_$$"
 mkdir -p "$WORK"
@@ -126,6 +129,9 @@ report() { # report VERDICT EXIT [flags]
     --arg llama_version "${LLAMA_VERSION:-unknown}" \
     --arg llama_help_hash "${LLAMA_HELP_HASH:-}" \
     --arg model_sha256 "${MODEL_SHA:-}" \
+    --arg model_name "${MODEL_NAME:-unknown}" \
+    --arg model_file "$(basename "$MODEL_PATH")" \
+    --argjson model_size_bytes "${MODEL_SIZE_BYTES:-null}" \
     --argjson cfg_ctx "$CTX" --arg cfg_kv "$KV" \
     --argjson cfg_ngl "$NGL" --argjson cfg_n "$REQUESTS" \
     --argjson mem_base "$MEM_AVAIL_BASE" \
@@ -152,6 +158,8 @@ report() { # report VERDICT EXIT [flags]
        env: {
          llama_version: $llama_version,
          llama_help_hash: $llama_help_hash,
+         model_name: $model_name,
+         model_file: $model_file,
          model_sha256: $model_sha256,
          model_size_bytes: $model_size_bytes
        },
@@ -258,7 +266,7 @@ note "healthy in ${HEALTH_LATENCY_MS}ms, gpu_layers=$GPU_LAYERS"
 
 # ---- one streaming request per trial ---------------------------------------
 REQUEST_BODY=$(jq -nc --arg m "$MODEL_NAME" --arg p "$PROMPT" --argjson mt "$MAX_TOKENS" \
-  '{model:"gemma",messages:[{role:"user",content:$p}],max_tokens:$mt,
+  '{model:$m,messages:[{role:"user",content:$p}],max_tokens:$mt,
     temperature:0,stream:true,stream_options:{include_usage:true}}')
 
 SUCCESS=0; HTTP_OK=0; GEN_TOKENS_TOTAL=0

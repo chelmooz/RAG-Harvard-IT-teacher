@@ -1,0 +1,1301 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PROF-IA — Document maître définitif v1.3</title>
+    <style>
+        :root {
+            /* Palette Dark Mode */
+            --bg-body: #0f172a;       /* Slate 900 */
+            --bg-card: #1e293b;       /* Slate 800 */
+            --bg-code: #000000;       /* Noir pur pour le code */
+            --text-main: #e2e8f0;     /* Slate 200 */
+            --text-muted: #94a3b8;    /* Slate 400 */
+            --border-color: #334155;  /* Slate 700 */
+            
+            /* Accents */
+            --primary: #38bdf8;       /* Sky 400 */
+            --secondary: #4ade80;     /* Green 400 */
+            --accent: #fb923c;        /* Orange 400 */
+            --danger: #f87171;        /* Red 400 */
+            
+            /* Boxes */
+            --box-info-bg: rgba(56, 189, 248, 0.1);
+            --box-warning-bg: rgba(251, 146, 60, 0.1);
+            --box-success-bg: rgba(74, 222, 128, 0.1);
+            --box-danger-bg: rgba(248, 113, 113, 0.1);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text-main);
+            background-color: var(--bg-body);
+            margin: 0;
+            padding: 2rem;
+            max-width: 1200px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        h1, h2, h3, h4 {
+            color: #ffffff;
+            margin-top: 2.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5rem;
+        }
+
+        h1 {
+            text-align: center;
+            border-bottom: none;
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            color: var(--primary);
+        }
+
+        .subtitle {
+            text-align: center;
+            color: var(--text-muted);
+            font-style: italic;
+            margin-bottom: 2rem;
+            display: block;
+        }
+
+        .badge-container {
+            display: flex;
+            justify-content: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            margin-bottom: 2rem;
+        }
+
+        .badge {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            font-size: 0.95rem;
+            background-color: var(--bg-card);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 0.75rem;
+            text-align: left;
+        }
+
+        th {
+            background-color: #2d3748;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        tr:nth-child(even) {
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+
+        code {
+            background-color: var(--bg-code);
+            padding: 0.2em 0.4em;
+            border-radius: 4px;
+            font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 0.9em;
+            color: var(--accent);
+            border: 1px solid var(--border-color);
+        }
+
+        pre {
+            background-color: var(--bg-code);
+            color: #e2e8f0;
+            padding: 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            position: relative;
+            border: 1px solid var(--border-color);
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        pre::before {
+            content: attr(data-lang);
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .warning-box {
+            background-color: var(--box-warning-bg);
+            border-left: 5px solid var(--accent);
+            padding: 1rem;
+            margin: 1.5rem 0;
+            border-radius: 0 8px 8px 0;
+            color: #fed7aa;
+        }
+        
+        .warning-box strong {
+            color: var(--accent);
+        }
+
+        .info-box {
+            background-color: var(--box-info-bg);
+            border-left: 5px solid var(--primary);
+            padding: 1rem;
+            margin: 1.5rem 0;
+            border-radius: 0 8px 8px 0;
+            color: #bae6fd;
+        }
+
+        .info-box strong {
+            color: var(--primary);
+        }
+
+        .success-box {
+            background-color: var(--box-success-bg);
+            border-left: 5px solid var(--secondary);
+            padding: 1rem;
+            margin: 1.5rem 0;
+            border-radius: 0 8px 8px 0;
+            color: #bbf7d0;
+        }
+
+        .danger-box {
+            background-color: var(--box-danger-bg);
+            border-left: 5px solid var(--danger);
+            padding: 1rem;
+            margin: 1.5rem 0;
+            border-radius: 0 8px 8px 0;
+            color: #fecaca;
+        }
+
+        ul li {
+            margin-bottom: 0.5rem;
+        }
+
+        a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+            color: #7dd3fc;
+        }
+
+        hr {
+            border: 0;
+            height: 1px;
+            background: var(--border-color);
+            margin: 3rem 0;
+        }
+
+        ol li {
+            margin-bottom: 0.5rem;
+        }
+
+        /* Specific styles for the Annex */
+        .annex-section {
+            margin-top: 4rem;
+            padding-top: 2rem;
+            border-top: 2px dashed var(--primary);
+        }
+        
+        .gap-table td:first-child {
+            font-weight: bold;
+            width: 20%;
+            color: var(--primary);
+        }
+
+        @media print {
+            body { 
+                background-color: white; 
+                color: black; 
+                padding: 0; 
+            }
+            .badge-container { display: none; }
+            pre { 
+                background-color: #f1f5f9; 
+                color: #1e293b; 
+                border: 1px solid #cbd5e1;
+                box-shadow: none;
+            }
+            code {
+                background-color: #f1f5f9;
+                color: #be185d;
+                border: none;
+            }
+            table {
+                background-color: transparent;
+            }
+            th, td {
+                border-color: #cbd5e1;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div style="border:4px solid #b91c1c;background:#fef2f2;padding:1.25rem;margin:1.5rem 0;border-radius:10px;font-family:system-ui,sans-serif">
+  <h2 style="margin:0 0 .6rem;border:0;color:#b91c1c">⛔ LEGACY — SUPERSEDED BY <code>PROF-IA-v1.4-master.md</code></h2>
+  <p style="margin:0 0 .6rem"><strong>Ce document n'est PAS la source de vérité.</strong>
+  Il est conservé comme <strong>patrimoine de migration</strong> : il décrit l'état
+  « v1.3 » du projet et l'annexe de transition depuis
+  <code>RAG-Harvard-IT-teacher</code> (Ollama / Qwen3-14B).</p>
+  <p style="margin:0 0 .6rem">La référence normative est
+  <a href="../architecture/PROF-IA-v1.4-master.md"><code>docs/architecture/PROF-IA-v1.4-master.md</code></a>
+  et les décisions qui le sous-tendent sont tracées dans <code>docs/architecture/adr/</code>.</p>
+  <p style="margin:0"><strong>Points explicitement superseded — ne pas appliquer :</strong></p>
+  <ul style="margin:.4rem 0 0 1.2rem;padding:0">
+    <li><strong>§4 / §16 — réseau :</strong> ce document prescribe <code>172.17.0.1</code>
+        (bridge <code>docker0</code> par défaut, adresse <em>non garantie</em>).
+        Le v1.4 impose un réseau dédié <code>profia-llama</code>
+        <code>172.30.50.0/24</code> et une résolution par <code>host-gateway</code>
+        — voir <code>ADR-003</code>.</li>
+    <li><strong>§A.3.1 — sécurité :</strong> la phrase « accès strictement localhost
+        (<code>127.0.0.1</code>) » est <strong>auto-contradictoire</strong> avec son propre
+        §4/§16 qui lie le bridge. Corrigé par ADR-003.</li>
+    <li><strong>§5 / §14 — évaluation :</strong> « Judge + Devil's Advocate » est
+        <strong>remplacé</strong> par le Laya Quality Gate — voir <code>ADR-004</code>.</li>
+    <li><strong>§14 — métriques de mémoire :</strong> les seuils proposés ici ont été
+        retirés. T0.-1 ne fixe <em>aucun</em> seuil ; il mesure et rend un verdict
+        par configuration.</li>
+  </ul>
+  <p style="margin:.6rem 0 0;font-size:.9em;color:#7f1d1d">
+    Conservé tel quel à titre d'historique : aucune affirmation n'a été réécrite.
+  </p>
+</div>
+
+<h1>PROF-IA / RAG-Harvard-IT-teacher</h1>
+<span class="subtitle">Document maître définitif v1.3 — Source de Vérité Unique</span>
+
+<div class="badge-container">
+    <span class="badge">Debian 13 bare metal</span>
+    <span class="badge">BC-250 8C / 40 CU (À Qualifier)</span>
+    <span class="badge">16 Go GDDR6 partagée</span>
+    <span class="badge">UMA 512 Mo</span>
+    <span class="badge">Vulkan/RADV</span>
+    <span class="badge">llama.cpp</span>
+    <span class="badge">Gemma 4 26B A4B IQ3_XS</span>
+    <span class="badge">BGE-M3</span>
+    <span class="badge">PostgreSQL + pgvector</span>
+    <span class="badge">OKF v0.2</span>
+    <span class="badge">Laya</span>
+</div>
+
+<p><strong>Version de référence :</strong> 2026-10-06 (v1.3). Ce document remplace la v1.2. Il intègre les corrections critiques d'architecture (réseau, compilation) tout en préservant l'intégralité de la stratégie de migration détaillée dans l'Annexe Technique.</p>
+
+<div class="info-box">
+    <strong>Règles de lecture</strong>
+    <ul>
+        <li><strong>DÉJÀ FAIT :</strong> éléments déclarés comme déjà réalisés dans l’environnement matériel.</li>
+        <li><strong>À VÉRIFIER / QUALIFIER :</strong> éléments dont la stabilité ou la présence réelle n'est pas garantie sans test (ex: 40 CU).</li>
+        <li><strong>À CONSTRUIRE :</strong> éléments applicatifs du nouveau projet.</li>
+        <li><strong>À BENCHMARKER :</strong> choix de performance qui ne doivent pas être figés sans mesure.</li>
+    </ul>
+</div>
+
+<hr>
+
+<h2>Sommaire</h2>
+<ol>
+    <li><a href="#source">Sources et décisions de référence</a></li>
+    <li><a href="#hardware">Plateforme BC-250 : État Matériel & Qualification</a></li>
+    <li><a href="#os">Debian 13 et validation GPU</a></li>
+    <li><a href="#architecture">Architecture cible complète</a></li>
+    <li><a href="#model">Gemma 4 26B A4B et llama.cpp</a></li>
+    <li><a href="#embeddings">BGE-M3, reranker et Whisper</a></li>
+    <li><a href="#rag">Pipeline RAG</a></li>
+    <li><a href="#laya">Laya : routage et qualité</a></li>
+    <li><a href="#okf">LLM Wiki et OKF v0.2</a></li>
+    <li><a href="#data">PostgreSQL / pgvector / FTS</a></li>
+    <li><a href="#api">API et contrats JSON</a></li>
+    <li><a href="#frontend">Frontend et Nginx</a></li>
+    <li><a href="#security">Sécurité et périmètre réseau</a></li>
+    <li><a href="#evaluation">Évaluation automatique, feedback et golden set</a></li>
+    <li><a href="#repo">Structure du nouveau dépôt</a></li>
+    <li><a href="#deploy">Déploiement, Services & Connectivité</a></li>
+    <li><a href="#tests">Plan de tests et benchmarks</a></li>
+    <li><a href="#roadmap">Roadmap de construction</a></li>
+    <li><a href="#acceptance">Definition of Done</a></li>
+    <li><a href="#final">Architecture finale résumée</a></li>
+    <li><a href="#annex">Annexe Technique : Stratégie de Migration & Recommandations</a></li>
+</ol>
+
+<!-- SECTIONS -->
+
+<h2 id="source">1. Sources et décisions de référence</h2>
+<p>Le document s’appuie sur les éléments déjà établis du projet, le dépôt de référence existant, la documentation BC-250 consultée et les spécifications publiques du modèle/format.</p>
+<table>
+    <thead>
+        <tr>
+            <th>Source</th>
+            <th>Usage</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><a href="https://github.com/Forbidden-Darkness/AMD-BC-250-UEFI-v2.2-Firmware-Menu-Script">Firmware Menu Script BC-250 v2.2</a></td>
+            <td>Référence du firmware modifié utilisé pour la configuration matérielle.</td>
+        </tr>
+        <tr>
+            <td><a href="https://elektricm.github.io/amd-bc250-docs/">AMD BC-250 Documentation</a></td>
+            <td>Validation des contraintes Linux, kernel, Mesa, IOMMU, UMA, RADV/Vulkan, ROCm et stabilité.</td>
+        </tr>
+        <tr>
+            <td><a href="https://okf.md/spec/">OKF Spec</a></td>
+            <td>OKF v0.2 : trust/lifecycle fields, version du bundle et règles de conformité.</td>
+        </tr>
+        <tr>
+            <td><a href="https://huggingface.co/bartowski/google_gemma-4-26B-A4B-it-GGUF">Gemma 4 26B A4B GGUF</a></td>
+            <td>Repository et choix de quantification.</td>
+        </tr>
+        <tr>
+            <td><a href="https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md">llama.cpp Server Docs</a></td>
+            <td>Arguments de ligne de commande, endpoints API, gestion mémoire Vulkan.</td>
+        </tr>
+    </tbody>
+</table>
+<p><strong>Décision :</strong> le dépôt existant est une référence fonctionnelle, pas une base à patcher. Le nouveau système est reconstruit proprement à partir de ce document.</p>
+
+<h2 id="hardware">2. Plateforme BC-250 : État Matériel & Qualification</h2>
+<h3>2.1 État matériel retenu</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Paramètre</th>
+            <th>Référence du projet</th>
+            <th>Statut</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>CPU</td>
+            <td>AMD Zen 2, <strong>8 cœurs actifs</strong></td>
+            <td>DÉJÀ FAIT</td>
+        </tr>
+        <tr>
+            <td>GPU</td>
+            <td>RDNA2, <strong>40 CU visés</strong></td>
+            <td>À QUALIFIER (Non garanti)</td>
+        </tr>
+        <tr>
+            <td>Mémoire</td>
+            <td>16 Go GDDR6 partagée CPU/GPU</td>
+            <td>MATÉRIEL</td>
+        </tr>
+        <tr>
+            <td>UMA</td>
+            <td>512 Mo minimum / allocation dynamique</td>
+            <td>DÉJÀ CONFIGURÉ</td>
+        </tr>
+        <tr>
+            <td>Firmware</td>
+            <td>Firmware modifié via le script Forbidden-Darkness</td>
+            <td>DÉJÀ FAIT</td>
+        </tr>
+        <tr>
+            <td>IOMMU</td>
+            <td>Doit rester désactivé selon la documentation BC-250</td>
+            <td>À VÉRIFIER</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="warning-box">
+<strong>Point Critique : 40 CU</strong>
+La configuration firmware prépare le terrain, mais le déverrouillage effectif des 40 CU dépend d'un patch pilote <code>amdgpu</code> expérimental. Toutes les cartes ne sont pas stables à 40 CU. 
+<br><strong>Conséquence Projet :</strong> Aucune optimisation logicielle ne doit supposer les 40 CU acquis. Le système doit fonctionner correctement avec la configuration nominale (souvent 24-32 CU détectés) et gagner en performance si le patch tient. La qualification thermique et de stabilité est une étape bloquante avant la production.
+</div>
+
+<h3>2.2 Important sur les 512 Mo</h3>
+<p>Le réglage 512 Mo ne signifie pas « seulement 512 Mo de VRAM ». Il définit la mémoire minimale réservée côté UMA ; la mémoire GPU peut être utilisée dynamiquement au-delà de cette valeur. La documentation explique également que les limites dynamiques Linux peuvent nécessiter une configuration TTM si l’on veut pousser la consommation VRAM plus haut.</p>
+
+<h2 id="os">3. Debian 13 et validation GPU</h2>
+<p>Le projet cible Debian 13 bare metal. Nous conservons Debian car c’est le choix du projet, mais les versions réelles de kernel/Mesa doivent être validées avant d’aller plus loin.</p>
+
+<h3>3.1 Contraintes BC-250 à respecter</h3>
+<ul>
+    <li><strong>Kernel :</strong> préférer une version validée par la documentation BC-250 ; 6.18.18 LTS est recommandé.</li>
+    <li><strong>Mesa :</strong> 25.1.3+ minimum indiqué ; 25.3.x recommandé.</li>
+    <li><strong>IOMMU :</strong> désactivé.</li>
+</ul>
+
+<h3>3.2 Validation minimale après installation</h3>
+<pre data-lang="bash">uname -a
+cat /proc/cmdline
+lscpu
+lspci -nn | grep -Ei 'VGA|Display|AMD'
+free -h
+dmesg | grep -i amdgpu
+vulkaninfo --summary
+# Vérifier le nombre de CU réellement exposés par le driver
+vulkaninfo --summary | grep -i computeUnits</pre>
+<p><strong>Critères :</strong></p>
+<ul>
+    <li>8 cœurs visibles par <code>lscpu</code>.</li>
+    <li>GPU AMD détecté par PCI.</li>
+    <li>RADV/Vulkan détecté sans erreur critique.</li>
+    <li>Pas de boucle de reset GPU dans <code>dmesg</code>.</li>
+</ul>
+
+<h3>3.3 Vulkan/RADV contre ROCm</h3>
+<pre data-lang="text">BC-250
+├── RADV / Vulkan
+│   └── llama.cpp → Gemma 4
+│
+└── ROCm / PyTorch (OPTIONNEL)
+    ├── BGE-M3
+    ├── bge-reranker-v2-m3
+    └── Whisper</pre>
+<p><strong>Décision :</strong> llama.cpp reste sur Vulkan/RADV. Pour les workloads PyTorch, on mesure CPU contre ROCm ; on ne déduit pas leur placement à l’avance.</p>
+
+<h2 id="architecture">4. Architecture cible complète</h2>
+<pre data-lang="ascii">Utilisateur
+   │
+   ▼
+React / navigateur
+   │
+   ▼
+Nginx :8080
+   │
+   ▼
+FastAPI :8000 (Conteneurisé)
+   │
+   ▼
+Laya Router
+   │
+   ├── compréhension / intention
+   ├── mode de recherche
+   └── plan de récupération JSON
+   │
+   ▼
+BGE-M3 (Embedding Service)
+   │
+   ▼
+PostgreSQL + pgvector + PostgreSQL FTS
+   │
+   ▼
+Top 30–50 candidats
+   │
+   ▼
+RRF / fusion
+   │
+   ▼
+bge-reranker-v2-m3
+   │
+   ▼
+Top 5–8 passages
+   │
+   ▼
+Context Builder
+   │
+   ▼
+llama.cpp / Vulkan (Processus Hôte Systemd)
+   │
+   ▼
+Gemma 4 26B A4B IQ3_XS
+   │
+   ▼
+Laya Quality Gate
+   │
+   ├── réponse
+   ├── sources
+   ├── confiance qualitative
+   └── métadonnées qualité
+   │
+   ▼
+FastAPI → Nginx → React</pre>
+
+<h3>4.1 Principe fondamental</h3>
+<p>Le LLM ne doit pas être utilisé comme moteur de recherche. La récupération documentaire est déterministe et observable ; Gemma synthétise à partir du contexte fourni. Laya orchestre et contrôle.</p>
+
+<h3>4.2 Services & Topologie Réseau</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Service</th>
+            <th>Responsabilité</th>
+            <th>Emplacement</th>
+            <th>Exposition</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Nginx</td>
+            <td>Reverse proxy, statique frontend</td>
+            <td>Hôte ou Conteneur</td>
+            <td>LAN :8080</td>
+        </tr>
+        <tr>
+            <td>FastAPI</td>
+            <td>API métier, orchestration RAG</td>
+            <td>Conteneur Docker</td>
+            <td>Interne (via Nginx)</td>
+        </tr>
+        <tr>
+            <td>PostgreSQL</td>
+            <td>documents, chunks, métadonnées</td>
+            <td>Conteneur Docker</td>
+            <td>Interne (Réseau Docker)</td>
+        </tr>
+        <tr>
+            <td>llama-server</td>
+            <td>Inférence Gemma (Vulkan)</td>
+            <td><strong>Hôte (Systemd)</strong></td>
+            <td><strong>Interface Docker Bridge (ex: 172.17.0.1:8081)</strong></td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="info-box">
+<strong>Note Technique Cruciale : Connexion Docker ↔ Host</strong>
+<div style="border-left:4px solid #b91c1c;background:#fef2f2;padding:.5rem .8rem;margin:.5rem 0;font-family:system-ui,sans-serif;font-size:.95em">
+  <strong>⚠ SUPERSEDED (v1.4) — cette section est caduque.</strong>
+  Elle prescrit <code>172.17.0.1</code>, adresse de l'interface <code>docker0</code> par
+  défaut, qui n'est <em>pas garantie</em>. v1.4 impose un réseau déclaré
+  <code>profia-llama</code> (<code>172.30.50.0/24</code>, passerelle <code>172.30.50.1</code>)
+  et une résolution par <code>host-gateway</code>. Voir
+  <code>docs/architecture/adr/ADR-003-network-host-gateway.md</code>.
+</div>
+Puisque <code>llama-server</code> tourne directement sur l'hôte (pour gérer Vulkan/Mémoire finement) et <code>FastAPI</code> dans Docker :
+<ul>
+<li>Ne pas utiliser <code>127.0.0.1</code> depuis le conteneur (cela pointerait vers le conteneur lui-même).</li>
+<li>Configurer <code>llama-server</code> pour écouter sur l'adresse IP de l'interface bridge Docker de l'hôte (par défaut <code>172.17.0.1</code> sur Debian/Linux standard, ou vérifier avec <code>ip addr show docker0</code>).</li>
+<li>Dans le fichier <code>.env</code> du backend : <code>LLAMA_SERVER_URL=http://172.17.0.1:8081</code>.</li>
+<li>Sécurité : Utiliser les pare-feux locaux (<code>nftables</code>/<code>iptables</code>) pour restreindre l'accès à ce port uniquement depuis le sous-réseau Docker, interdisant l'accès LAN direct.</li>
+</ul>
+</div>
+
+<h2 id="model">5. Gemma 4 26B A4B et llama.cpp</h2>
+<h3>5.1 Modèle figé pour la V1</h3>
+<ul>
+    <li>Repository : <code>bartowski/google_gemma-4-26B-A4B-it-GGUF</code></li>
+    <li>Fichier : <code>google_gemma-4-26B-A4B-it-IQ3_XS.gguf</code></li>
+</ul>
+
+<h3>5.2 Installation & Compilation (Corrigé)</h3>
+<p>Pour permettre le téléchargement simplifié via <code>-hf</code>, la compilation doit inclure le support CURL. Cependant, pour une robustesse maximale hors-ligne ou reproductible, le téléchargement manuel est préféré.</p>
+
+<h4>Option A : Compilation avec Support HF (Simple)</h4>
+<pre data-lang="bash"># Installer les dépendances
+sudo apt-get install git cmake build-essential libcurl4-openssl-dev
+
+git clone https://github.com/ggml-org/llama.cpp.git
+cd llama.cpp
+# IMPORTANT : LLAMA_CURL=ON est requis pour utiliser l'argument -hf
+cmake -B build -DGGML_VULKAN=ON -DLLAMA_CURL=ON
+cmake --build build --config Release -j$(nproc)</pre>
+
+<h4>Option B : Téléchargement Manuel & Chemin Local (Recommandé Prod)</h4>
+<pre data-lang="bash"># Télécharger le modèle manuellement
+mkdir -p /opt/models
+wget https://huggingface.co/bartowski/google_gemma-4-26B-A4B-it-GGUF/resolve/main/google_gemma-4-26B-A4B-it-IQ3_XS.gguf \
+  -O /opt/models/gemma-4-26B-iq3_xs.gguf
+
+# La compilation n'a alors pas besoin de CURL, mais on garde ON par compatibilité future
+cmake -B build -DGGML_VULKAN=ON -DLLAMA_CURL=ON
+cmake --build build --config Release -j$(nproc)</pre>
+
+<h3>5.3 Commande de départ — à benchmarker</h3>
+<p>Si Option B (Local) est choisie :</p>
+<pre data-lang="bash">llama-server \
+  -m /opt/models/gemma-4-26B-iq3_xs.gguf \
+  -ngl 999 \
+  -c 8192 \
+  -ctk q4_0 \
+  -ctv q4_0 \
+  -fa on \
+  -b 512 \
+  -ub 512 \
+  -np 1 \
+  --jinja \
+  --host 172.17.0.1 \
+  --port 8081</pre>
+
+<div class="warning-box">
+<strong>Attention sur -ngl 999</strong>
+<code>-ngl 999</code> demande l'offload maximal des couches sur le GPU. Cela ne garantit pas que tout tiendra en mémoire, surtout avec le partage UMA. 
+<br><strong>Action :</strong> Après lancement, vérifier les logs <code>llama-server</code>. Si des erreurs d'allocation apparaissent ou si la vitesse chute drastiquement (swapping), réduire <code>-ngl</code> progressivement (ex: 40, puis 30...) jusqu'à trouver le point stable. Ne pas considérer 999 comme magique.
+</div>
+
+<p><strong>Reproductibilité :</strong> Épingler le commit hash de llama.cpp dans <code>deploy/llama/VERSION</code>.</p>
+
+<h2 id="embeddings">6. BGE-M3, reranker et Whisper</h2>
+<h3>6.1 BGE-M3</h3>
+<ul>
+    <li>Modèle : BAAI BGE-M3.</li>
+    <li>Dimension dense cible : 1024.</li>
+    <li>Stockage : pgvector pour dense ; PostgreSQL FTS pour la branche lexicale.</li>
+</ul>
+
+<h3>6.2 Placement CPU/ROCm</h3>
+<p>V1 doit pouvoir choisir via variables d'environnement :</p>
+<pre data-lang="env"># Corrected Typo from previous version
+EMBEDDING_DEVICE=cpu
+RERANKER_DEVICE=cpu
+WHISPER_DEVICE=cpu</pre>
+<p>Puis, après validation ROCm :</p>
+<pre data-lang="env">EMBEDDING_DEVICE=cuda
+RERANKER_DEVICE=cuda
+WHISPER_DEVICE=cuda</pre>
+<p>Le mot <code>cuda</code> dans PyTorch ROCm est normal.</p>
+
+<h2 id="rag">7. Pipeline RAG</h2>
+<h3>7.1 Recherche</h3>
+<pre data-lang="flowchart">question
+  → normalisation
+  → query embedding
+  → dense pgvector
+  → PostgreSQL FTS
+  → fusion RRF
+  → N_candidats = 30–50
+  → reranker sur ces candidats
+  → N_passages_context = 5–8
+  → context builder</pre>
+
+<h3>7.2 Modes</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Mode</th>
+            <th>Usage</th>
+            <th>Cible</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>precise</td>
+            <td>Question factuelle ciblée</td>
+            <td>Top 5</td>
+        </tr>
+        <tr>
+            <td>explore</td>
+            <td>Question large</td>
+            <td>Top 12 avec diversité/MMR</td>
+        </tr>
+        <tr>
+            <td>synthesis</td>
+            <td>Synthèse multi-sources</td>
+            <td>Top 20 candidats avant reranking</td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="laya">8. Laya : routage et qualité</h2>
+<h3>8.1 RetrievalPlan</h3>
+<pre data-lang="json">{
+  "intent": "technical_question",
+  "complexity": "medium",
+  "mode": "precise",
+  "domain": "linux",
+  "scope": "local_corpus",
+  "top_k_retrieval": 40,
+  "top_k_rerank": 6,
+  "needs_generation": true,
+  "needs_clarification": false,
+  "knowledge_format": "OKF",
+  "knowledge_format_version": "0.2"
+}</pre>
+
+<h3>8.2 Quality Gate</h3>
+<pre data-lang="json">{
+  "answer_supported_by_context": true,
+  "answer_contains_hallucination": false,
+  "question_answered": true,
+  "sources_sufficient": true,
+  "confidence_level": "high",
+  "action": "accept",
+  "valid_citations": ["doc-123#chunk-7"],
+  "invalid_citations": [],
+  "limitation": null,
+  "knowledge_format": "OKF",
+  "knowledge_format_version": "0.2"
+}</pre>
+<p><strong>Important :</strong> Seuls les niveaux qualitatifs (<code>high</code>/<code>medium</code>/<code>low</code>) sont exposés. Aucun score numérique arbitraire n'est présenté comme une probabilité statistique valide tant qu'une calibration n'a pas eu lieu.</p>
+
+<h2 id="okf">9. LLM Wiki et OKF v0.2</h2>
+<h3>9.1 OKF est le format canonique de la connaissance</h3>
+<p>La Wiki n’est pas une collection de JSON. Le format de connaissance canonique est <strong>OKF</strong> : fichiers Markdown UTF-8 avec YAML frontmatter, organisés en bundle et versionnés dans Git.</p>
+
+<h3>9.2 Bundle cible</h3>
+<pre data-lang="tree">knowledge/
+ ├── index.md
+ ├── log.md
+ ├── concepts/
+ ├── howtos/
+ ├── references/
+ ├── decisions/
+ └── sources/</pre>
+
+<h2 id="data">10. PostgreSQL / pgvector / FTS</h2>
+<h3>10.1 Tables conceptuelles (Mise à jour v1.3)</h3>
+<p>Ajout de la table <code>responses</code> manquante pour assurer l'intégrité référentielle des évaluations et feedbacks.</p>
+<pre data-lang="sql">-- Table principale pour stocker les échanges
+CREATE TABLE responses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conversation_id UUID NOT NULL,
+    user_query TEXT NOT NULL,
+    assistant_answer TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    metadata JSONB -- Peut contenir le RetrievalPlan brut
+);
+
+CREATE TABLE documents (...);
+CREATE TABLE document_chunks (...);
+CREATE TABLE wiki_documents (...);
+
+-- Liens vers responses.id
+CREATE TABLE response_evaluations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    response_id UUID REFERENCES responses(id) ON DELETE CASCADE,
+    judge_score FLOAT,
+    devil_score FLOAT,
+    groundedness BOOLEAN,
+    completeness FLOAT,
+    citation_validity FLOAT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE human_feedback (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    response_id UUID REFERENCES responses(id) ON DELETE CASCADE,
+    human_rating INT CHECK (human_rating BETWEEN 1 AND 5),
+    human_comment TEXT,
+    is_golden BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);</pre>
+
+<h3>10.2 Recherche vectorielle</h3>
+<p>pgvector est utilisé pour la recherche dense. PostgreSQL FTS fournit le signal lexical. Les deux sont fusionnés avant reranking.</p>
+
+<h2 id="api">11. API et contrats JSON</h2>
+<h3>11.1 Endpoints principaux</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Endpoint</th>
+            <th>But</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>POST /api/chat</td>
+            <td>Question → retrieval → génération → quality gate.</td>
+        </tr>
+        <tr>
+            <td>GET /api/wiki/{path}</td>
+            <td>Consulter un concept OKF.</td>
+        </tr>
+        <!-- Autres endpoints inchangés -->
+    </tbody>
+</table>
+
+<h3>11.2 Réponse chat (Harmonisée)</h3>
+<p>Suppression du champ numérique <code>confidence</code> trompeur au profit de <code>confidence_level</code>.</p>
+<pre data-lang="json">{
+   "answer": "...",
+   "sources": [
+     {
+       "document_id": "doc-123",
+       "chunk_id": "chunk-7",
+       "title": "Debian 13",
+       "page": 4,
+       "score": 0.91 
+       // Note: score ici est un score de similarité/rerank brut, utile pour debug,
+       // mais NE DOIT PAS être affiché comme "confiance" utilisateur.
+     }
+   ],
+   "quality": {
+     "action": "accept",
+     "confidence_level": "high" // String enum: high, medium, low
+   },
+   "knowledge_format": "OKF",
+   "knowledge_format_version": "0.2"
+ }</pre>
+
+<h2 id="frontend">12. Frontend et Nginx</h2>
+<h3>12.1 React</h3>
+<ul>
+    <li>Indicateur de confiance/qualité basé sur <code>confidence_level</code>.</li>
+    <li>Affichage des sources cliquables.</li>
+</ul>
+
+<h3>12.2 Nginx</h3>
+<pre data-lang="text">Internet / LAN
+     │
+     ▼
+Nginx :8080
+ ├── /        → React
+ └── /api/    → FastAPI :8000 (Container)</pre>
+
+<h2 id="security">13. Sécurité et périmètre réseau</h2>
+<p>Périmètre V1 : application locale/LAN de confiance.</p>
+<ul>
+    <li><strong>Accès llama-server :</strong> Restreint à l'interface bridge Docker (172.17.0.1) via firewall local. Jamais exposé publiquement.</li>
+    <li><strong>Données Personnelles (PII) :</strong> 
+        <div class="danger-box">
+        <strong>Attention Critique :</strong> Le chiffrement de la base de données (at-rest) ne protège PAS les données une fois déchiffrées en mémoire pour l'embedding ou le traitement LLM. De plus, les vecteurs d'embedding peuvent potentiellement révéler des informations sensibles par inversion.
+        <br><strong>Exigence :</strong> Avant ingestion, un processus de nettoyage/redaction des PII (emails, noms, IPs privées) doit être appliqué si le corpus contient des données personnelles. Ne pas compter uniquement sur le chiffrement SQL.
+        </div>
+    </li>
+    <li>Secrets dans <code>.env</code> non commité.</li>
+</ul>
+
+<h2 id="evaluation">14. Évaluation automatique, feedback et golden set</h2>
+<h3>14.1 Judge + Devil’s Advocate</h3>
+<p>V1 : évaluation asynchrone après réponse. Une panne de l’évaluateur ne doit pas rendre le chat inutilisable.</p>
+
+<h2 id="repo">15. Structure du nouveau dépôt</h2>
+<pre data-lang="tree">RAG-Harvard-IT-teacher/
+ ├── backend/
+ │   ├── app/
+ │   │   ├── api/
+ │   │   ├── core/
+ │   │   ├── db/
+ │   │   ├── ingestion/
+ │   │   ├── retrieval/
+ │   │   ├── reranking/
+ │   │   ├── laya/
+ │   │   ├── llm/
+ │   │   ├── evaluation/
+ │   │   └── wiki/
+ │   ├── tests/
+ │   └── pyproject.toml
+ │
+ ├── frontend/
+ │   ├── src/
+ │   └── package.json
+ │
+ ├── knowledge/
+ │   ├── index.md
+ │   ├── log.md
+ │   ├── concepts/
+ │   ├── howtos/
+ │   ├── references/
+ │   ├── decisions/
+ │   └── sources/
+ │
+ ├── raw/
+ │   └── .gitkeep
+ │
+ ├── scripts/
+ │   ├── install/
+ │   ├── benchmark/
+ │   ├── ingest/
+ │   └── validate/
+ │
+ ├── config/
+ │   ├── app.example.env
+ │   ├── laya/
+ │   └── nginx/
+ │
+ ├── deploy/
+ │   ├── docker-compose.yml
+ │   ├── nginx/
+ │   └── systemd/
+ │       └── profia-llama.service
+ │
+ ├── evals/
+ │   ├── golden/
+ │   ├── datasets/
+ │   └── reports/
+ │
+ ├── docs/
+ │   └── architecture/
+ │
+ ├── AGENTS.md
+ ├── README.md
+ └── .env.example</pre>
+
+<h2 id="deploy">16. Déploiement, Services & Connectivité</h2>
+<h3>16.1 Conteneurs (Backend/Front/DB)</h3>
+<pre data-lang="bash">docker compose up -d postgres
+docker compose up -d backend frontend nginx</pre>
+
+<h3>16.2 llama.cpp sur l'Hôte (Systemd)</h3>
+<div style="border-left:4px solid #b91c1c;background:#fef2f2;padding:.5rem .8rem;margin:.5rem 0;font-family:system-ui,sans-serif;font-size:.95em">
+  <strong>⚠ SUPERSEDED (v1.4) — l'unité de service ci-dessous est caduque.</strong>
+  Elle écoute sur <code>172.17.0.1</code> (bridge <code>docker0</code> par défaut, adresse non
+  garantie). v1.4 impose <code>172.30.50.1</code> sur le réseau déclaré
+  <code>profia-llama</code>. Le service v1.4 en vigueur est
+  <code>deploy/systemd/profia-llama.service</code> de ce dépôt, et il ne doit
+  <strong>pas</strong> poser <code>MemoryDenyWriteExecute=true</code> (casse le JIT Vulkan).
+  Voir <code>docs/architecture/adr/ADR-003-network-host-gateway.md</code> et
+  <code>ADR-002-llama-cpp-vulkan-gemma4.md</code>.
+</div>
+<p>Créer le service <code>/etc/systemd/system/profia-llama.service</code>.</p>
+<pre data-lang="ini">[Unit]
+Description=Gemma 4 llama.cpp server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=profia
+Group=profia
+WorkingDirectory=/opt/llama.cpp/build/bin
+# Assurez-vous que le chemin du modèle existe (Voir Section 5.2 Option B)
+ExecStart=/opt/llama.cpp/build/bin/llama-server \
+  -m /opt/models/gemma-4-26B-iq3_xs.gguf \
+  -ngl 999 \
+  -c 8192 \
+  -ctk q4_0 \
+  -ctv q4_0 \
+  -fa on \
+  -b 512 \
+  -ub 512 \
+  -np 1 \
+  --jinja \
+  --host 172.17.0.1 \
+  --port 8081
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target</pre>
+
+<div class="info-box">
+<strong>Vérification Post-Installation</strong>
+1. Démarrer le service : <code>systemctl start profia-llama</code>
+2. Vérifier l'écoute : <code>ss -tlnp | grep 8081</code> (doit montrer 172.17.0.1:8081)
+3. Tester depuis le conteneur backend : 
+   <code>docker exec -it <nom_conteneur_backend> curl http://172.17.0.1:8081/health</code>
+</div>
+
+<h3>16.3 Notes de Migration (Depuis Ollama)</h3>
+<ul>
+    <li>Supprimer les images Ollama et les volumes associés.</li>
+    <li>Migrer les configurations de prompt système vers le format attendu par Gemma (ChatML/Jinja).</li>
+    <li>Les embeddings générés par Qwen/Ollama ne sont pas compatibles avec BGE-M3 : ré-indexation complète requise.</li>
+</ul>
+
+<h2 id="tests">17. Plan de tests et benchmarks</h2>
+<h3>17.1 Matériel</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Test</th>
+            <th>Mesure</th>
+            <th>Pass</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Connectivité</td>
+            <td>Curl depuis Backend vers Host Llama</td>
+            <td>HTTP 200 OK</td>
+        </tr>
+        <tr>
+            <td>CU</td>
+            <td>vulkaninfo</td>
+            <td>Noter le nombre réel (pas de supposition 40)</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>17.2 llama.cpp</h3>
+<ul>
+    <li>Benchmark de chargement.</li>
+    <li>Tokens/s prompt & génération.</li>
+    <li>Pic mémoire GPU/UMA (surveiller swap).</li>
+    <li>Latence p50/p95.</li>
+</ul>
+
+<h2 id="roadmap">18. Roadmap de construction</h2>
+<h3>Phase 0 — Validation machine</h3>
+<ul>
+    <li>Boot Debian 13.</li>
+    <li>Valider kernel/Mesa.</li>
+    <li>Valider GPU/RADV.</li>
+    <li><strong>Qualifier les CU disponibles.</strong></li>
+</ul>
+
+<h3>Phase 1 — llama.cpp</h3>
+<ul>
+    <li>Compiler avec CURL/Vulkan.</li>
+    <li>Télécharger Modèle Localement.</li>
+    <li>Configurer Systemd sur Interface Docker.</li>
+    <li>Tester connectivité Backend <-> Host.</li>
+    <li>Benchmarker Tokens/s et Mémoire.</li>
+</ul>
+
+<h3>Phase 2 — PostgreSQL/RAG</h3>
+<ul>
+    <li>Déployer Stack Docker.</li>
+    <li>Implémenter Schéma (avec table responses).</li>
+    <li>Ingestion & Embedding BGE-M3.</li>
+</ul>
+
+<!-- Phases suivantes inchangées -->
+
+<h2 id="acceptance">19. Definition of Done</h2>
+<h3>Plateforme</h3>
+<ul>
+    <li>Connexion stable entre Backend Docker et llama-server Hôte.</li>
+    <li>Stabilité GPU vérifiée (pas de crash/reset sous charge).</li>
+</ul>
+
+<h3>LLM</h3>
+<ul>
+    <li>Gemma 4 chargé localement.</li>
+    <li>Benchmarks archivés.</li>
+</ul>
+
+<h3>Qualité</h3>
+<ul>
+    <li>Contrat API expose bien <code>confidence_level</code> string.</li>
+    <li>Table <code>responses</code> peuplée correctement.</li>
+</ul>
+
+<h2 id="final">20. Architecture finale résumée</h2>
+<pre data-lang="ascii">BC-250 — Hardware Instable/Potentiel Non Garanti
+8 CPU cores + CU Variable + 16 GB GDDR6 + UMA Dynamique
+                 │
+                 ▼
+          Debian 13 bare metal
+                 │
+       ┌──────────────────┐
+       ▼                   ▼
+ RADV / Vulkan          ROCm/PyTorch
+       │                (OPTIONNEL/BENCH)
+       ▼                   │
+ llama.cpp (HOST)         ├─ BGE-M3
+       │                  ├─ reranker
+       ▼                  └─ Whisper
+ Gemma 4 26B
+ IQ3_XS
+       │
+       ▼ (Via 172.17.0.1:8081)
+     Laya (IN CONTAINER)
+       │
+       ▼
+ PostgreSQL + pgvector + FTS
+       ▲
+       │
+ BGE-M3 → RRF → reranker
+       ▲
+       │
+ OKF Knowledge Bundle
+       │
+       ▼
+ raw → consolidation → knowledge/ → validation
+       │
+       ▼
+ FastAPI → Nginx → React</pre>
+<p><strong>Principe directeur :</strong> La séparation Host/Container est assumée pour la maîtrise GPU. La sécurité repose sur le cloisonnement réseau local. La connaissance est canonique en Git (OKF), opérationnelle en SQL.</p>
+
+<p><strong>Références vérifiées pour cette version</strong></p>
+<ul>
+    <li><a href="https://elektricm.github.io/amd-bc250-docs/">AMD BC-250 Documentation</a></li>
+    <li><a href="https://okf.md/spec/">OKF — Specification</a></li>
+    <li><a href="https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md">llama.cpp — llama-server</a></li>
+    <li><a href="https://huggingface.co/bartowski/google_gemma-4-26B-A4B-it-GGUF">bartowski — Gemma 4 26B A4B GGUF</a></li>
+</ul>
+
+<!-- ANNEXE TECHNIQUE CONSERVÉE ET ENRICHIE -->
+<h2 id="annex" class="annex-section">21. Annexe Technique : Stratégie de Migration & Recommandations</h2>
+<p>Cette annexe détaille la feuille de route opérationnelle pour passer de l'implémentation héritée (<code>RAG-Harvard-IT-teacher</code> actuel basé sur Ollama/Qwen3) vers l'architecture cible définie ci-dessus (llama.cpp/Gemma4/OKF). Elle est indispensable pour comprendre les transitions et éviter les pièges connus.</p>
+
+<h3>A.1 Analyse des Écarts Critiques (Gap Analysis)</h3>
+<p>Avant toute ligne de code, il est impératif de comprendre les ruptures technologiques majeures entre l'existant et la cible.</p>
+<table class="gap-table">
+    <thead>
+        <tr>
+            <th>Composant</th>
+            <th>Actuel (<code>RAG-Harvard-IT-teacher</code>)</th>
+            <th>Cible (<code>PROF-IA v1.3</code>)</th>
+            <th>Action Requise</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>LLM Runtime</td>
+            <td>Ollama (Docker)</td>
+            <td>llama.cpp (Native/Systemd)</td>
+            <td>Supprimer Ollama. Compiler llama.cpp avec backend Vulkan/RADV.</td>
+        </tr>
+        <tr>
+            <td>Modèle</td>
+            <td>Qwen3-14B (Q4_K_M)</td>
+            <td>Gemma 4 26B A4B (IQ3_XS)</td>
+            <td>Télécharger le GGUF spécifique. Ajuster les paramètres de contexte/KV cache.</td>
+        </tr>
+        <tr>
+            <td>Knowledge Base</td>
+            <td>Obsidian Vault / Markdown libre</td>
+            <td>Bundle Git OKF v0.2</td>
+            <td>Migrer les notes vers la structure <code>knowledge/</code> avec frontmatter YAML standardisé (trust/lifecycle).</td>
+        </tr>
+        <tr>
+            <td>Embeddings</td>
+            <td>BGE-M3 (via Ollama ou API?)</td>
+            <td>BGE-M3 (PyTorch local CPU/ROCm)</td>
+            <td>Isoler le service d'embedding. Vérifier l'utilisation de <code>torch.cuda</code> vs ROCm.</td>
+        </tr>
+        <tr>
+            <td>Reranking</td>
+            <td>Non mentionné explicitement</td>
+            <td>bge-reranker-v2-m3</td>
+            <td>Intégrer un module de reranking post-retrieval avant la génération.</td>
+        </tr>
+        <tr>
+            <td>Orchestration</td>
+            <td>FastAPI simple</td>
+            <td>Laya Router + Quality Gate</td>
+            <td>Implémenter la logique "Laya" pour le routage d'intention et le contrôle qualité (hallucinations/citations).</td>
+        </tr>
+        <tr>
+            <td>Base de Données</td>
+            <td>PostgreSQL + pgvector</td>
+            <td>PostgreSQL + pgvector + FTS</td>
+            <td>Ajouter l'indexation Full Text Search (FTS) pour la fusion RRF.</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>A.2 Plan d'Action Prioritaire (Phases)</h3>
+<p>Il est recommandé de suivre cet ordre strict pour minimiser les risques d'instabilité hardware et logicielle.</p>
+
+<h4>Phase 0 : Préparation Environnement & Hardware (BC-250)</h4>
+<p><em>Objectif : Valider que la machine supporte la nouvelle stack avant d'y investir du développement.</em></p>
+<ol>
+    <li><strong>OS & Drivers :</strong> Assurer que Debian 13 est installé avec Kernel >= 6.18.18 et Mesa >= 25.1.3.</li>
+    <li><strong>Validation GPU :</strong>
+        <ul>
+            <li>Exécuter <code>vulkaninfo --summary</code> pour confirmer la détection RADV/GFX1013.</li>
+            <li>Vérifier l'état des 40 CU (si activé via patch amdgpu) et la stabilité thermique.</li>
+        </ul>
+    </li>
+    <li><strong>Mémoire UMA :</strong> Confirmer que 512 Mo sont réservés mais que l'allocation dynamique permet d'utiliser plus de VRAM si nécessaire (crucial pour Gemma 26B IQ3_XS ~12.4 Go).</li>
+</ol>
+
+<h4>Phase 1 : Remplacement du Moteur LLM (Ollama -> llama.cpp)</h4>
+<p><em>Objectif : Libérer les ressources et contrôler précisément l'inférence.</em></p>
+<ol>
+    <li><strong>Compilation llama.cpp :</strong>
+        <pre data-lang="bash">git clone https://github.com/ggml-org/llama.cpp.git
+cd llama.cpp
+# Correction v1.3 : Activation de CURL pour supporter -hf si besoin, sinon voir Option B §5.2
+cmake -B build -DGGML_VULKAN=ON -DLLAMA_CURL=ON
+cmake --build build --config Release -j$(nproc)</pre>
+    </li>
+    <li><strong>Service Systemd :</strong> Créer <code>/etc/systemd/system/profia-llama.service</code> tel que défini au §16.3.
+        <br><em>Note :</em> Utiliser <code>-ngl 999</code> pour demander l'offload maximal. Surveiller les logs pour les erreurs d'allocation mémoire Vulkan.
+    </li>
+    <li><strong>Test de Charge :</strong> Mesurer les tokens/s pour Gemma 4 26B IQ3_XS. Comparer avec l'ancien Qwen3-14B pour calibrer les attentes de latence.</li>
+</ol>
+
+<h4>Phase 2 : Migration de la Connaissance vers OKF v0.2</h4>
+<p><em>Objectif : Structurer la Wiki pour qu'elle soit machine-readable et versionnée.</em></p>
+<ol>
+    <li><strong>Structure Répertoire :</strong> Créer l'arborescence <code>knowledge/</code> décrite au §9.3.</li>
+    <li><strong>Conversion des Notes :</strong>
+        <ul>
+            <li>Prendre les fichiers <code>.md</code> de l'ancien <code>vault/wiki/</code>.</li>
+            <li>Injecter le frontmatter OKF v0.2 obligatoire (voir exemple §9.4).</li>
+        </ul>
+    </li>
+    <li><strong>Indexation Git :</strong> Initialiser un sous-module ou dossier dédié dans le repo principal pour ce bundle de connaissance.</li>
+</ol>
+
+<h4>Phase 3 : Refonte du Pipeline RAG (Backend Python)</h4>
+<p><em>Objectif : Implémenter la chaîne Retrieval -> Fusion -> Rerank -> Generate.</em></p>
+<ol>
+    <li><strong>Dépendances Python :</strong> Mettre à jour <code>pyproject.toml</code> : retirer <code>ollama-python</code>, ajouter <code>transformers</code> (pour BGE-M3/Reranker), <code>sentence-transformers</code>, <code>psycopg[binary,pool]</code>, <code>pgvector</code>.</li>
+    <li><strong>Module Embedding & Reranking :</strong>
+        <ul>
+            <li>Créer <code>backend/app/core/embedder.py</code> utilisant <code>BAAI/bge-m3</code>.</li>
+            <li>Créer <code>backend/app/core/reranker.py</code> utilisant <code>bge-reranker-v2-m3</code>.</li>
+            <li><em>Stratégie Device :</em> Commencer sur CPU pour la stabilité, benchmarker ensuite ROCm.</li>
+        </ul>
+    </li>
+    <li><strong>Recherche Hybride (PostgreSQL) :</strong>
+        <ul>
+            <li>Modifier le schéma SQL pour inclure une colonne <code>tsvector</code> (<code>search_text</code>) dans <code>document_chunks</code>.</li>
+            <li>Implémenter la requête hybride et la fusion RRF côté Python.</li>
+        </ul>
+    </li>
+    <li><strong>Intégration Laya :</strong>
+        <ul>
+            <li>Implémenter <code>backend/app/laya/router.py</code> : Classifie l'intention (précis/explore/synthèse) et ajuste <code>top_k</code>.</li>
+            <li>Implémenter <code>backend/app/laya/quality_gate.py</code> : Après génération par llama.cpp, vérifier si la réponse contient des citations valides présentes dans le contexte fourni.</li>
+        </ul>
+    </li>
+</ol>
+
+<h4>Phase 4 : Adaptation API & Frontend</h4>
+<p><em>Objectif : Aligner les contrats JSON.</em></p>
+<ol>
+    <li><strong>Endpoints FastAPI :</strong>
+        <ul>
+            <li><code>/api/chat</code> doit retourner la structure du §11.2 (avec <code>knowledge_format: "OKF"</code>).</li>
+            <li>Ajouter <code>/api/wiki/{path}</code> pour servir directement les fichiers Markdown depuis le bundle Git (lecture seule).</li>
+        </ul>
+    </li>
+    <li><strong>Frontend React :</strong>
+        <ul>
+            <li>Metttre à jour l'affichage des sources pour refléter les métadonnées OKF (Type, Status, Verified By).</li>
+            <li>Afficher clairement le niveau de confiance ("High/Medium/Low") issu de Laya, sans chiffre arbitraire trompeur.</li>
+        </ul>
+    </li>
+</ol>
+
+<h3>A.3 Points de Vigilance Techniques</h3>
+<div class="warning-box">
+    <strong>1. Sécurité & Données Sensibles :</strong> Comme l'utilisateur est prudent concernant l'accès des agents d'IA aux données personnelles sensibles, assure-toi que le pipeline d'ingestion nettoie bien les PII (Personally Identifiable Information) <em>avant</em> l'embedding, ou configure PostgreSQL pour chiffrer les colonnes sensibles. L'accès au serveur llama.cpp reste strictement localhost (<code>127.0.0.1</code>).
+    <div style="border-left:4px solid #b91c1c;background:#fef2f2;padding:.6rem .9rem;margin:.6rem 0;font-family:system-ui,sans-serif;font-size:.95em">
+      <strong>⚠ SUPERSEDED (v1.4)</strong> — la dernière phrase est fausse pour cette
+      architecture et contredit les §4 et §16 de ce même document. Depuis un conteneur,
+      <code>127.0.0.1</code> désigne <em>le conteneur</em>, jamais l'hôte : le backend ne peut
+      donc pas joindre llama-server ainsi. v1.4 impose l'écoute sur l'interface bridge d'un
+      réseau Docker dédié et une résolution <code>host-gateway</code> — voir
+      <code>docs/architecture/adr/ADR-003-network-host-gateway.md</code>. Le filtrage réseau
+      local (nftables/iptables) reste la responsabilité du déploiement.
+    </div>
+</div>
+
+<div class="warning-box">
+    <strong>2. Stabilité BC-250 :</strong> Le passage à Gemma 26B est lourd. Si tu observes des crashes GPU (reset cycles), reviens immédiatement à une configuration partielle (ex: désactiver l'unlock 40 CU ou réduire le contexte à 4096 tokens) plutôt que de tenter de "forcer" la stabilité. La documentation insiste sur la qualification progressive.
+</div>
+
+<div class="info-box">
+    <strong>3. Reproductibilité :</strong> Épingle la version exacte de llama.cpp (commit hash) dans ton repo. Ne laisse pas le serveur se mettre à jour automatiquement. Cela garantit que les benchmarks et les résultats sont comparables dans le temps.
+</div>
+
+<div class="info-box">
+    <strong>4. Coût Calculatoire :</strong> Le reranking (<code>bge-reranker-v2-m3</code>) est coûteux. Assure-toi qu'il ne tourne pas simultanément avec la génération LLM si la mémoire VRAM partagée est saturée. Séquence les opérations : Retrieval -> Rerank (CPU/GPU léger) -> Generation (GPU lourd).
+</div>
+
+<h3>A.4 Prochaine Étape Immédiate</h3>
+<p>Je te recommande de commencer par la <strong>Phase 1 (llama.cpp)</strong>. Tant que le nouveau moteur LLM n'est pas stable et benchmarké sur ta BC-250, il est inutile de complexifier le backend Python avec Laya et le Reranker.</p>
+<p><strong>Action suggérée :</strong> Générer le script d'installation précis pour compiler llama.cpp avec Vulkan et créer le service systemd correspondant.</p>
+
+<hr>
+<p style="text-align: center; color: var(--text-muted); font-size: 0.9rem;">
+    Document unique — PROF-IA / RAG-Harvard-IT-teacher — v1.3<br>
+    Corrigé suite à la revue technique du 2026-10-06.<br>
+    Changements majeurs : Résolution conflit réseau Docker/Host, Correction compilation llama.cpp, Clarification statut 40 CU, Harmonisation contrat JSON Confidence, Ajout table Responses, Précision sécurité PII.<br>
+    Préservation intégrale de l'Annexe Technique pour guider la migration opérationnelle.<br>
+    Toute modification ultérieure doit incrémenter la version et être inscrite dans ce document.
+</p>
+
+</body>
+</html>
