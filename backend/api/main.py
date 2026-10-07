@@ -125,7 +125,7 @@ async def health_check(
 ):
     """
     Vérifie l'état de tous les composants :
-    PostgreSQL + pgvector, Ollama (Vulkan), GPU AMD BC-250 (ROCm embeddings).
+    PostgreSQL + pgvector, LLM llama.cpp (Vulkan/RADV, sur l'hôte), embeddings BGE-M3 CPU.
     """
     import torch
 
@@ -138,17 +138,18 @@ async def health_check(
 
     # Ollama
     try:
-        await rag.check_ollama_health()
+        await rag.check_llm_health()
         ollama_status = f"ok ({settings.OLLAMA_MODEL})"
     except Exception as e:
         ollama_status = f"unavailable: {e}"
 
-    # GPU AMD
+    # Embeddings : CPU en v1.4 (G2-T00). Le GPU de v1.4 est Vulkan/RADV et
+    # tourne sur l'HÔTE via llama.cpp — il n'est pas visible depuis ce process.
     if torch.cuda.is_available():
         props = torch.cuda.get_device_properties(0)
-        gpu_status = f"ok — {props.name} | {props.total_memory // 1024**2} Mo GDDR6"
+        gpu_status = f"ok — {props.name} | {props.total_memory // 1024**2} Mo"
     else:
-        gpu_status = "cpu-only (ROCm non détecté)"
+        gpu_status = "cpu-only (embeddings CPU)"
 
     overall = "healthy" if db_status == "ok" else "degraded"
 

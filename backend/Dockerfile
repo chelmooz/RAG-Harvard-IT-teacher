@@ -1,15 +1,17 @@
 # =============================================================================
-# Prof IA v6.0 — Dockerfile Backend (AMD BC-250 / ROCm 7.2 / Python 3.13)
+# Prof IA v1.4 — Dockerfile Backend (BC-250 / CPU / Python 3.13)
 # =============================================================================
 # FIX BUG#2 : Ce fichier était absent — docker compose build échouait
 #
-# NOTE ROCm : PyTorch ROCm ne peut pas être installé depuis le PyPI standard.
-# En production sur BC-250, utiliser l'image de base ROCm officielle :
-#   FROM rocm/pytorch:rocm7.2_ubuntu22.04_py3.13_pytorch_release
-# En développement / CI sans GPU, l'image python:3.13-slim est suffisante.
+# GPU — v1.4 (G2-T00) :
+#   Le chemin GPU de v1.4 est Vulkan/RADV, et il est exécuté par llama.cpp SUR
+#   L'HÔTE (ADR-002). Le conteneur backend n'a PAS de chemin GPU : BGE-M3 et le
+#   reranker tournent sur CPU.
+#   ROCm n'est pas le chemin cible (ADR-002 « Conséquences et risques » : « optionnel et non décidé »).
+#   `USE_ROCM` reste lisible pour une demande explicite, mais il est désactivé
+#   par défaut et ne masque PLUS aucun échec.
 #
-# Pour basculer en image ROCm complète, remplacer la ligne FROM ci-dessous
-# et retirer le bloc "PyTorch CPU (CI/dev)" pour activer le bloc ROCm.
+# Image de base : python slim (jamais rocm/pytorch).
 # =============================================================================
 
 ARG PYTHON_VERSION=3.13
@@ -31,14 +33,15 @@ WORKDIR /app
 # Copie séparée pour profiter du cache Docker (ne rebuild que si requirements changent)
 COPY requirements.txt .
 
-# PyTorch — sélection ROCm ou CPU via --build-arg USE_ROCM=true
-# En CI (sans GPU) l'index ROCm peut ne proposer que des wheels nightly ;
-# on retombe donc sur le build CPU fiable si l'install ROCm échoue.
+# PyTorch — sélection CPU (défaut v1.4) ou ROCm (demande explicite).
+#
+# G2-T00 : le repli `|| pip install .../whl/cpu` a été SUPPRIMÉ. Il rendait une
+# installation ROCm échouée indiscernable d'une installation réussie : `USE_ROCM=true`
+# pouvait ne rien signifier du tout. v1.4 exige que l'échec soit BRUYANT —
+# demander ROCm et le rater doit casser le build, pas installer du torch CPU en silence.
 RUN if [ "$USE_ROCM" = "true" ]; then \
         pip install --no-cache-dir torch torchvision torchaudio \
-            --index-url https://download.pytorch.org/whl/rocm7.2 || \
-        pip install --no-cache-dir torch torchvision torchaudio \
-            --index-url https://download.pytorch.org/whl/cpu; \
+            --index-url https://download.pytorch.org/whl/rocm7.2; \
     else \
         pip install --no-cache-dir torch torchvision torchaudio \
             --index-url https://download.pytorch.org/whl/cpu; \
@@ -51,11 +54,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # En PRODUCTION : décommenter ce COPY et commenter les volumes dans docker-compose.yml
 # COPY api/ /app/api/
 
-# ── Variables ROCm — injectées avant tout import torch ────────────────────────
-# Cyan Skillfish (gfx1013) absent de la liste officielle ROCm
-ENV HSA_OVERRIDE_GFX_VERSION=10.1.3
-ENV ROCR_VISIBLE_DEVICES=0
-# PYTORCH_HIP_ALLOC_CONF est calculé dynamiquement par config.py — ne pas fixer ici
+# ── Variables ROCm — VOLONTAIREMENT ABSENTES (G2-T00) ────────────────────────
+# HSA_OVERRIDE_GFX_VERSION et ROCR_VISIBLE_DEVICES ne sont plus définies ici :
+# elles n'ont de sens qu'avec un torch ROCm, qui n'est pas le chemin v1.4
+# (embeddings BGE-M3 CPU + reranker CPU, LLM externalisé sur l'hôte).
+# PYTORCH_HIP_ALLOC_CONF était également injecté ici ; il ne l'est plus.
+# Historique conservé : voir ADR-002 « Conséquences et risques » — « ROCm reste optionnel et non décidé ».
 
 # ── Répertoires de données ────────────────────────────────────────────────────
 RUN mkdir -p /app/data/uploads /app/data/logs /app/models

@@ -1,6 +1,6 @@
 """
-RAG Engine v6.0 — AMD BC-250 (Cyan Skillfish / RDNA2)
-=======================================================
+RAG Engine v1.4 — BGE-M3 CPU + LLM llama.cpp sur l'hôte (Vulkan/RADV)
+═══════════════════════════════════════════════════════════════════════
 CORRECTIFS v6.0 appliqués :
   - FIX BUG#2 : f-string SQL supprimé → deux requêtes paramétrées distinctes
   - FIX BUG#3 : pool asyncpg unique — réutilise get_db() de database.py
@@ -15,7 +15,7 @@ ARCHITECTURE v6.1 (DIP + SRP) :
   - Responsabilités séparées (PR P1) :
       * Retriever  → recherche vectorielle (HNSW pgvector)
       * Indexer    → indexation + stats + maintenance de la collection
-      * Generator  → génération LLM (Ollama) + construction des prompts
+      * Generator  → génération LLM + construction des prompts
   - RAGEngine = facade / composition root qui orchestre les trois.
 """
 
@@ -27,13 +27,20 @@ import asyncpg
 import numpy as np
 from loguru import logger
 
-# ── ROCm / PyTorch ─────────────────────────────────────────────────────────────
-# HSA_OVERRIDE_GFX_VERSION=10.1.3 DOIT être défini AVANT d'importer torch.
-# Sans cette variable, ROCm ne reconnaît pas le BC-250 (gfx1013 absent de la
-# liste officielle) et tombe silencieusement en mode CPU.
-os.environ.setdefault("HSA_OVERRIDE_GFX_VERSION", "10.1.3")
-os.environ.setdefault("PYTORCH_HIP_ALLOC_CONF", "max_split_size_mb:512")
-
+# ── PyTorch — CPU en v1.4 (G2-T00) ───────────────────────────────────────────
+# Ces setdefault ROCm ont été RETIRÉS : ROCm n'est pas le chemin GPU de v1.4
+# (ADR-002 « Conséquences et risques »). Ils indiquaient à torch ROCm de reconnaître gfx1013, alors
+# que torch est installé en CPU par le Dockerfile (`USE_ROCM=false`).
+# Injustifiés, ils introduisaient deux hazards :
+#   - `PYTORCH_HIP_ALLOC_CONF` pouvait fausser le réglage CPU de BATCH_SIZE,
+#     les deux dérivant des mêmes knobs AMD (AMD_GTT_SIZE_MB / AMD_RDNA2_CUS) ;
+#   - la détection device ci-dessous peut alors regarder un environnement ROCm
+#     partiel au lieu de l'état réel du processus.
+# Le chemin GPU de v1.4 est Vulkan/RADV, exécuté par llama.cpp SUR L'HÔTE
+# (ADR-002/003) et joint via LLAMA_SERVER_URL — ce n'est PAS ce module.
+# ---------------------------------------------------------------------------
+# NOTE : les knobs AMD (AMD_GTT_SIZE_MB, AMD_RDNA2_CUS) sont CONSERVÉS : BATCH_SIZE
+# ci-dessous en dérive et reste ainsi un réglage CPU pur.
 import torch
 from sentence_transformers import SentenceTransformer
 
@@ -43,25 +50,26 @@ from .protocols import EmbeddingProvider, LLMClient
 _settings = get_settings()
 
 
-# ── Détection GPU AMD ──────────────────────────────────────────────────────────
+# ── Device — CPU en v1.4 (G2-T00) ─────────────────────────────────────────────
 
 def _get_device() -> torch.device:
+    """Sélectionne le device des embeddings BGE-M3 — CPU, sans exception (v1.4).
+
+    Le chemin GPU de v1.4 est Vulkan/RADV via llama.cpp **sur l'hôte**
+    (ADR-002 « Conséquences et risques »). Ce module n'a donc aucune raison de
+    détecter un GPU, et n'en détecte plus : il n'y a ni sonde `torch.cuda`, ni
+    variable d'environnement, ni repli.
+
+    Pourquoi aucun repli conditionnel ? parce qu'un repli « GPU demandé mais
+    absent → CPU » masque exactement la panne qu'on cherche à voir : le process
+    continuerait en mode dégradé, silencieusement. Si un jour un device GPU est
+    réactivé, il doit **échouer bruyamment** (cf. la branche ROCm explicite du
+    `Dockerfile`, qui n'a pas de `|| cpu`), jamais se dégrader tout seul.
+
+    Le matériel AMD reste un paramètre de *performance*, pas de device : les knobs
+    `AMD_GTT_SIZE_MB` / `AMD_RDNA2_CUS` servent uniquement à dimensionner
+    `BATCH_SIZE` ci-dessous, et restent donc conservés.
     """
-    CRITIQUE BC-250 : La GDDR6 est unifiée entre CPU et GPU.
-    On force le device 'cuda' (alias ROCm sous PyTorch) pour que les
-    tenseurs vivent déjà sur la mémoire GPU — pas de copie DMA.
-    """
-    if torch.cuda.is_available():  # ROCm expose l'API CUDA
-        dev = torch.device("cuda:0")
-        props = torch.cuda.get_device_properties(0)
-        logger.info(
-            f"🟢 GPU AMD détecté : {props.name} | "
-            f"{props.total_memory // 1024**2} Mo GDDR6 unifiée | "
-            f"{_settings.AMD_RDNA2_CUS} CUs configurés "
-            f"({'débloqué 40 CU' if _settings.AMD_CU_UNLOCK_APPLIED else 'stock 24 CU'})"
-        )
-        return dev
-    logger.warning("⚠️  Pas de GPU ROCm détecté — exécution CPU (performances dégradées)")
     return torch.device("cpu")
 
 
@@ -357,7 +365,7 @@ class Indexer:
 
 class Generator:
     """
-    Génère la réponse finale via le LLM injecté (Ollama).
+    Génère la réponse finale via le LLM injecté.
 
     DIP : LLMClient injecté (pas de httpx direct).
     Construit les prompts système / complet (logique pure, testable).
@@ -426,12 +434,8 @@ class RAGEngine:
         db_url: str,
         embedding_provider: EmbeddingProvider,
         llm_client: LLMClient,
-        ollama_host: str = None,
-        model_name: str = "qwen3:14b",
     ):
         self.db_url = db_url
-        self.ollama_host = ollama_host or get_settings().OLLAMA_HOST
-        self.model_name = model_name
 
         # Dépendances injectées
         self.embedding_provider = embedding_provider
@@ -449,7 +453,7 @@ class RAGEngine:
 
     async def initialize(self):
         """
-        Récupère le pool partagé de database.py et vérifie Ollama via client injecté.
+        Récupère le pool partagé de database.py et vérifie le LLM via client injecté.
         """
         logger.info("🔧 Initialisation RAG Engine v6.1...")
 
@@ -462,10 +466,10 @@ class RAGEngine:
         logger.info("✅ Pool pgvector partagé (database.py)")
 
         try:
-            await self.check_ollama_health()
-            logger.info(f"✅ Ollama opérationnel — modèle : {self.model_name}")
+            await self.check_llm_health()
+            logger.info("✅ LLM opérationnel")
         except Exception as e:
-            logger.warning(f"⚠️  Ollama non disponible au démarrage : {e}")
+            logger.warning(f"⚠️  LLM non disponible au démarrage : {e}")
 
     # ── Délégation Retriever ──────────────────────────────────────────────────
 
@@ -506,7 +510,7 @@ class RAGEngine:
 
     # ── Health checks ──────────────────────────────────────────────────────────
 
-    async def check_ollama_health(self):
+    async def check_llm_health(self):
         return await self.llm_client.check_health()
 
     async def check_db_health(self):
@@ -516,7 +520,7 @@ class RAGEngine:
 
     async def close(self):
         """
-        Ferme le client HTTP Ollama via le client injecté.
+        Ferme le client HTTP LLM via le client injecté.
         NE ferme PAS self._pool — c'est le pool partagé de database.py,
         fermé par close_db() au shutdown de l'application FastAPI.
         """

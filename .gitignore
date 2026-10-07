@@ -52,6 +52,10 @@ docker-compose.override.yml
 
 # Session / local agent state (never push to remote)
 .omo/
+# Working tickets. Transient by design: docs/project/CHANGELOG.md is the single
+# source of truth for decisions, gates and evidence, so these must never become
+# a second normative source.
+.scratch/
 # Campaign artifacts (T0.-1). run_matrix.sh defaults --out outside the repo,
 # but an explicit --out inside it must not be committable.
 profia-fit-artifacts/

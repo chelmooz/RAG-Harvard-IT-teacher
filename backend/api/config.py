@@ -1,10 +1,15 @@
 """
-Configuration v6.0 — Prof IA (AMD BC-250 / Cyan Skillfish)
-============================================================
+Configuration v1.4 — Prof IA (BC-250 / BGE-M3 CPU + llama.cpp hôte Vulkan)
+========================================================================
 Calibrée pour :
   - 16 Go GDDR6 unifiée (amdgpu.gttsize=12288 → 12 Go VRAM disponibles)
   - 6 cœurs Zen 2 / 24 CUs RDNA2
-  - ROCm 7.2 + PyTorch 2.11+ / Python 3.13
+  - PyTorch 2.11+ CPU / Python 3.13
+
+GPU (G2-T00) : le chemin GPU de v1.4 est **Vulkan/RADV, sur l'hôte** via
+llama.cpp (ADR-002). Le backend n'exécute **rien** sur GPU : BGE-M3 et le
+reranker sont CPU. ROCm n'est pas le chemin cible — les champs AMD/ROCm
+conservés ici sont LEGACY et servent encore au calcul CPU de `BATCH_SIZE`.
 
 CORRECTIFS v6.0 :
   - pg18    : PostgreSQL 18.2 (cohérent avec toute la documentation)
@@ -25,7 +30,6 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings
 
 from .validators import (
-    _inject_rocm_env,
     _validate_amd_cus,
     _validate_api_token,
     _validate_cors,
@@ -47,32 +51,45 @@ class Settings(BaseSettings):
     # Exemple : postgresql://user:password@localhost:5432/prof_ia_v5
     DATABASE_URL: str = ""
 
-    # ── Ollama ───────────────────────────────────────────────────
-    # Défaut : localhost pour dev local ; en Docker, injecté via docker-compose.yml
-    OLLAMA_HOST:  str = "http://localhost:11434"
-    # Qwen3-14B Q4_K_M (~9,3 Go) — remplace Mistral 7B (2023, obsolète).
-    # Laisse ~2,7 Go de marge sur le budget 12 Go (AMD_GTT_SIZE_MB) pour le
-    # KV-cache : contexte à garder modeste (RAG_TOP_K=5, chunks courts).
-    # Qwen3 supporte le mode "thinking" — désactivé par défaut pour un RAG
-    # factuel (ajouter <think:6124c78e></think:6124c78e> au prompt système si besoin de le forcer).
-    OLLAMA_MODEL: str = "qwen3:14b"
+    # ── llama.cpp hôte (ADR-002/003) ──────────────────────────────
+    # Endpoint canonique pour l'inférence LLM (le vocabulaire Ollama des
+    # tickets v1.4 est historique — GLOSSARY.md). Injecté via
+    # docker-compose.yml : extra_hosts llama-host:172.30.50.1 (ADR-003).
+    # CONTRAT UNIQUE backend → LLM (G2-T02) : le backend ne possède AUCUNE
+    # variable de sélection de modèle — le modèle (Qwen2.5-7B-Instruct Q6_K)
+    # est configuré sur le service llama.cpp host/systemd (décision XZ #1).
+    LLAMA_SERVER_URL: str = "http://llama-host:8081"
 
-    # ── Ollama (options de génération) ───────────────────────────
-    # Valeurs calibrées pour BC-250 (validated point 3) — reprises telles
-    # quelles depuis l'ancien dict hardcodé d'OllamaLLMClient.generate().
-    OLLAMA_TEMPERATURE: float = 0.3
-    OLLAMA_TOP_P:       float = 0.9
-    OLLAMA_TOP_K:       int   = 40
-    OLLAMA_NUM_PREDICT: int   = 1024
-    OLLAMA_NUM_CTX:     int   = 4096
-    OLLAMA_NUM_THREAD:  int   = 6
-    OLLAMA_NUM_GPU:     int   = 99
-    OLLAMA_F16_KV:      bool  = True
+    # ── llama.cpp — options d'appel API (client HTTP, G2-T02) ─────
+    # L'ancien bloc OLLAMA_* (10 champs) a été supprimé par G2-T02.
+    # Seules les options qui appartiennent réellement au client HTTP
+    # (payload /v1/chat/completions) sont conservées ici, renommées en
+    # vocabulaire llama.cpp/OpenAI. Mapping depuis l'ancien bloc :
+    #   temperature → temperature (identique)
+    #   top_p       → top_p       (identique)
+    #   top_k       → top_k       (identique)
+    #   num_predict → max_tokens  (renommage OpenAI)
+    # Options de PROCESSUS llama.cpp — configurées sur le service
+    # llama.cpp (systemd/flags), JAMAIS comme settings FastAPI (XZ r.4) :
+    #   num_ctx  → -c (contexte serveur)      num_thread → n_threads (lanceur)
+    #   num_gpu  → -ngl (lanceur)             f16_kv     → cache KV (serveur)
+    #   + -ctk, -ctv, -np, -fa, -b, -ub, --jinja (lanceur/serveur)
+    # Valeurs calibrées BC-250 : points de départ à mesurer, pas garanties.
+    LLAMA_TEMPERATURE: float = 0.3
+    LLAMA_TOP_P:       float = 0.9
+    LLAMA_TOP_K:       int   = 40
+    LLAMA_MAX_TOKENS:  int   = 1024
 
-    # ── ROCm / AMD BC-250 ────────────────────────────────────────
-    HSA_OVERRIDE_GFX_VERSION: str = "10.1.3"  # Cyan Skillfish → gfx1013
-    # Budget LOGIQUE utilisé par l'appli (PYTORCH_HIP_ALLOC_CONF). Le vrai
-    # plafond kernel est posé via ttm.pages_limit=3014656 (Bazzite :
+    # ── AMD BC-250 — LEGACY (non actif en v1.4, G2-T00) ──────────────────────
+    # Champs CONSERVÉS pour ne pas casser `LocalEmbeddingProvider.BATCH_SIZE`,
+    # qui en dérive (CPU throughput). Ils ne pilotent plus aucun chemin GPU :
+    # ROCm n'est pas le chemin v1.4 (ADR-002 « Conséquences et risques » — « optionnel et non décidé »),
+    # le GPU de v1.4 est Vulkan/RADV via llama.cpp sur l'hôte.
+    # `HSA_OVERRIDE_GFX_VERSION` n'est plus injecté : voir `_inject_rocm_env`
+    # (LEGACY, non appelé).
+    HSA_OVERRIDE_GFX_VERSION: str = "10.1.3"  # LEGACY — non injecté (G2-T00)
+    # Budget LOGIQUE historique (partagé avec le calcul CPU de BATCH_SIZE).
+    # Le plafond kernel réel est posé via ttm.pages_limit=3014656 (Bazzite :
     # `rpm-ostree kargs --append-if-missing="ttm.pages_limit=3014656"`) +
     # UMA_SIZE=512 Mo (CMOS bc250memcfg) → split serveur 12 Go GPU / 4 Go CPU
     # (cf. vault/docs/superpowers/specs/
@@ -117,7 +134,10 @@ class Settings(BaseSettings):
 
     # ── Auto-évaluation (Juge + Avocat du diable) ───────────────
     # Quality-first : temperature=0 (déterministe), format=json.
-    # Exécution SÉQUENTIELLE (OLLAMA_NUM_PARALLEL=1) — pas de gather.
+    # Exécution SÉQUENTIELLE (un seul appel LLM à la fois) — pas de gather.
+    # NOTE (G2-T02) : EVAL_NUM_CTX/EVAL_NUM_PREDICT sont des paramètres de
+    # payload applicatif (appel d'évaluation), PAS des options de processus
+    # llama.cpp — leur migration d'API reste au périmètre T07.
     EVAL_TIMEOUT_S:   float = 15.0
     EVAL_NUM_PREDICT: int   = 150
     EVAL_NUM_CTX:     int   = 2048
@@ -160,10 +180,17 @@ def get_settings() -> Settings:
     """
     Retourne les settings en singleton (lru_cache).
 
-    Injecte les variables ROCm dans l'environnement process si non définies,
-    AVANT que torch soit importé ailleurs dans le code.
-    Note : lru_cache garantit que os.environ.setdefault n'est appelé qu'une fois
-    — correct en production, à désactiver dans les tests unitaires si nécessaire.
+    v1.4 (G2-T00) : n'injecte PLUS aucune variable ROCm dans l'environnement.
+    Avant, `_inject_rocm_env(s)` était appelé ici, AVANT que torch ne soit
+    importé ailleurs — ce qui faisait de ROCm un chemin actif implicite alors
+    que le chemin GPU de v1.4 est Vulkan/RADV via llama.cpp sur l'hôte
+    (ADR-002 « Conséquences et risques » : « ROCm reste optionnel et non décidé »).
+
+    La fonction `_inject_rocm_env` reste dans `validators.py`, marquée LEGACY et
+    non appelée, pour ne pas effacer la trace de la décision.
+
+    Note : lru_cache garantit que les setdefault éventuels ne sont appelés
+    qu'une fois — correct en production, à désactiver dans les tests unitaires.
     """
     s = Settings()
 
@@ -172,5 +199,4 @@ def get_settings() -> Settings:
     _validate_api_token(s)
     _validate_cors(s)
     _validate_amd_cus(s)
-    _inject_rocm_env(s)
     return s

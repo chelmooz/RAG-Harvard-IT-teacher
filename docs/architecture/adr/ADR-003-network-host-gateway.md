@@ -1,4 +1,4 @@
-# ADR-003 — Réseau hôte↔conteneur : passerelle dédiée + `host-gateway`
+# ADR-003 — Réseau hôte↔conteneur : passerelle dédiée, résolution explicite
 
 **Statut :** accepté · **Date :** 2026-10-06 · **Supersede :** le §4 et le §16 du document maître v1.3
 
@@ -18,6 +18,13 @@ Le même document contenait une contradiction interne : son §A.3.1 affirmait
 écouter llama.cpp sur la passerelle. Depuis un conteneur, `127.0.0.1` désigne
 **le conteneur lui-même**, jamais l'hôte.
 
+Une version précédente de cette ADR prescrivait `host-gateway` comme mécanisme
+de résolution : `extra_hosts: - "llama-host:host-gateway"`. Or le mécanisme
+`host-gateway` de Docker résout vers l'adresse de l'interface `docker0`
+par défaut (`172.17.0.1`), **pas** vers la gateway du réseau dédié
+`profia-llama` (`172.30.50.1`). Cette différence a causé des pertes de
+connexion silencieuses.
+
 ## Décision
 
 1. Un réseau bridge **déclaré explicitement** :
@@ -29,11 +36,12 @@ Le même document contenait une contradiction interne : son §A.3.1 affirmait
 
 2. `llama-server` écoute sur `172.30.50.1:8081` (l'adresse hôte de ce réseau
    dédié), **pas** sur `0.0.0.0`.
-3. Le backend résout l'hôte par le nom DNS `llama-host`, injecté via :
+3. Le backend résout l'hôte par le nom DNS `llama-host` vers l'IP explicite
+   `172.30.50.1`, injecté via `extra_hosts` :
 
    ```yaml
    extra_hosts:
-     - "llama-host:host-gateway"
+     - "llama-host:172.30.50.1"
    ```
 
    et consomme `LLAMA_SERVER_URL=http://llama-host:8081`.
@@ -44,9 +52,13 @@ Le même document contenait une contradiction interne : son §A.3.1 affirmait
 
 Un sous-réseau déclaré rend l'adresse **déterministe** : elle ne peut pas être
 réattribuée par Docker, et un conflit se détecte à la création du réseau au
-lieu de se manifester plus tard comme une panne de connexion. `host-gateway`
-est le mécanisme standard pour « la passerelle de l'hôte » : il évite de coder
-en dur une IP dans le compose et dans le backend.
+lieu de se manifester plus tard comme une panne de connexion.
+
+L'IP explicite `172.30.50.1` dans `extra_hosts` garantit que `llama-host`
+résout **toujours** vers la gateway du réseau dédié `profia-llama`,
+indépendamment du comportement par défaut de `host-gateway` (qui pointe vers
+`docker0` / `172.17.0.1`). Cela élimine une classe entière de pannes de
+connectivité silencieuses.
 
 Écouter sur la passerelle du réseau dédié plutôt que sur `0.0.0.0` évite
 d'exposer llama.cpp sur toutes les interfaces, dont le LAN.
@@ -61,6 +73,8 @@ d'exposer llama.cpp sur toutes les interfaces, dont le LAN.
   considéré fonctionnel.
 - Toute divergence d'adresse (`172.17.0.1`, `0.0.0.0` publié, `127.0.0.1`
   côté backend) est un défaut, pas une variante.
+- Le mécanisme `host-gateway` **ne doit pas être utilisé** pour la résolution
+  de `llama-host` vers la cible canonique `172.30.50.1`.
 
 ## Portée
 

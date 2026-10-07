@@ -120,7 +120,7 @@ export default function Dashboard() {
   };
   const sysRows = [
     { k: '⬡ Statut', v: health?.status || '...', color: statusColor },
-    { k: '⊟ GPU', v: health?.gpu?.includes('ok') ? 'ROCm' : 'cpu', color: 'rgba(255,255,255,0.7)' },
+    { k: '⊟ GPU', v: health?.gpu?.includes('ok') ? 'GPU' : 'CPU', color: 'rgba(255,255,255,0.7)' },
     { k: '◈ Vectors', v: docCount, color: 'rgba(255,255,255,0.7)' },
     { k: '⚡ Modèle', v: health?.ollama?.split(' ')[0] || '...', color: '#00e5cc' },
   ];

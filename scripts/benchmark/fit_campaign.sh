@@ -80,6 +80,9 @@ mkdir -p "$WORK"
 RAW="$WORK/stream.tsv"
 HDRS="$WORK/headers.txt"
 LLAMA_LOG="$WORK/llama.log"
+# The server load log is the evidence behind startup.gpu_layers and the buffer
+# sizes; keep a copy so the claim can be re-checked from an archived report.
+LLAMA_SNAPSHOT="${FIT_LLAMA_SNAPSHOT:-}"
 
 # ---- helpers ---------------------------------------------------------------
 ms()      { date +%s%3N; }
@@ -110,9 +113,82 @@ RST_RE='gpu reset|ring .*timeout|amdgpu.*reset'
 kernel_new_lines() { kernel_log | tail -n "+$(( KERNEL_LINES_BASE + 1 ))"; }
 count_new() { kernel_new_lines | grep -Eic "$1" || true; }
 
+# ---- load-time facts published by llama-server itself -------------------------
+# These are read from the server's own load log, not inferred from RSS. When the
+# weights are offloaded they live in the device buffer, so process RSS says
+# nothing about the model's footprint: the real G1 run reported rss=1043 MiB
+# against a 5532 MiB Vulkan buffer for the same 6254 MB model.
+#
+# Buffer sizes are published per backend, one line each:
+#   load_tensors: Vulkan0    model buffer size =  5532.43 MiB   <- device
+#   load_tensors: CPU_Mapped model buffer size =   426.36 MiB   <- host
+#   load_tensors: CPU        model buffer size =  5958.79 MiB   <- host only
+# An absent line stays null. Nothing is defaulted to 0 or summed from a guess.
+
+# Buffer name -> which side of memory it represents. ADR-002 fixes the device
+# backend to Vulkan, so only that name is device-side; every other backend name
+# is host-side. Naming alternative accelerators here would reintroduce the very
+# dependency the ADR removes.
+buffer_is_device() { case "$1" in Vulkan*) return 0 ;; *) return 1 ;; esac; }
+
+# Parses the backend name and MiB value out of one published buffer line.
+parse_buffer_line() { # -> BUFFER_BACKEND / BUFFER_VALUE
+  BUFFER_BACKEND=$(printf '%s' "$1" \
+    | sed -E 's/^.*[[:space:]]([A-Za-z0-9_]+)[[:space:]]+model buffer size.*$/\1/')
+  # The value is the last number on the line: backend names never contain digits
+  # (Vulkan0 does not appear after "size = "), so this is unambiguous.
+  BUFFER_VALUE=$(printf '%s' "$1" | grep -oE '[0-9]+\.[0-9]+|[0-9]+' | tail -1 || true)
+  # An unextractable name means the line is not a buffer line after all. Under
+  # `set -e` a bare `&&` returning false would abort the whole campaign, so the
+  # assignment is written as a complete `if`.
+  if [ "$BUFFER_BACKEND" = "$1" ]; then BUFFER_BACKEND=""; fi
+}
+
+# Sums every published buffer line, split by side. A backend can be split across
+# two lines (CPU + CPU_Mapped), so values accumulate rather than overwrite.
+read_buffer_sizes() { # $1 = log file
+  local dev=0 host=0 total=0 seen=false skipped_zero=false
+  local line
+  while IFS= read -r line; do
+    parse_buffer_line "$line"
+    if [ -z "$BUFFER_BACKEND" ] || [ -z "$BUFFER_VALUE" ]; then continue; fi
+    # A 0.00 MiB line is llama.cpp's speculative first pass: it commits to the
+    # device buffer, reports a provisional size, then re-lays the tensors and
+    # prints the final allocation. Summing both passes would double-count.
+    if awk -v v="$BUFFER_VALUE" 'BEGIN{exit !(v > 0)}'; then
+      seen=true
+      if buffer_is_device "$BUFFER_BACKEND"; then
+        dev=$(awk -v a="$dev" -v b="$BUFFER_VALUE" 'BEGIN{printf "%.2f", a+b}')
+      else
+        host=$(awk -v a="$host" -v b="$BUFFER_VALUE" 'BEGIN{printf "%.2f", a+b}')
+      fi
+      total=$(awk -v a="$total" -v b="$BUFFER_VALUE" 'BEGIN{printf "%.2f", a+b}')
+    else
+      skipped_zero=true
+    fi
+  done < <(grep -a 'model buffer size' "$1" 2>/dev/null || true)
+  # A pass that published only provisional 0.00 MiB lines allocated nothing real.
+  if [ "$skipped_zero" = true ] && [ "$seen" = false ]; then
+    DEVICE_BUFFER_MIB=null; HOST_BUFFER_MIB=null; MODEL_BUFFER_MIB=null
+    return 0
+  fi
+  if [ "$seen" = true ]; then
+    DEVICE_BUFFER_MIB=$(awk -v v="$dev" 'BEGIN{print (v>0)? v : "null"}')
+    HOST_BUFFER_MIB=$(awk -v v="$host" 'BEGIN{print (v>0)? v : "null"}')
+    MODEL_BUFFER_MIB="$total"
+  fi
+}
+
 # ---- report ----------------------------------------------------------------
 REQ_JSON='[]'; SUMMARY_JSON='{}'; FLAGS='[]'
-GPU_LAYERS=0; HEALTH_LATENCY_MS=null; STARTUP_OK=false
+# gpu_layers stays null until the server actually publishes an offload line, so a
+# missing line can never be misread as "no offload happened".
+GPU_LAYERS=null
+# Empty string is jq's own "unknown"; null would be re-serialised as the string
+# "null" through --arg. The report maps "" back to a real JSON null.
+OFFLOAD_BACKEND=""
+DEVICE_BUFFER_MIB=null; HOST_BUFFER_MIB=null; MODEL_BUFFER_MIB=null
+HEALTH_LATENCY_MS=null; STARTUP_OK=false
 OOM_COUNT=0; RESET_COUNT=0
 MEM_AVAIL_BASE=null; SWAP_FREE_BASE=null
 VRAM_BASE=null; GTT_BASE=null; TEMP_BASE=null
@@ -141,6 +217,11 @@ report() { # report VERDICT EXIT [flags]
     --argjson temp_base "$TEMP_BASE" \
     --argjson health_ms "$HEALTH_LATENCY_MS" \
     --argjson gpu_layers "$GPU_LAYERS" \
+    --arg offload_backend "$OFFLOAD_BACKEND" \
+    --arg verbosity_flag "${LV_FLAG:-}" \
+    --argjson device_buffer_mib "$DEVICE_BUFFER_MIB" \
+    --argjson host_buffer_mib "$HOST_BUFFER_MIB" \
+    --argjson model_buffer_mib "$MODEL_BUFFER_MIB" \
     --argjson startup_ok "$STARTUP_OK" \
     --argjson reqs "$REQ_JSON" \
     --argjson sum "$SUMMARY_JSON" \
@@ -171,11 +252,16 @@ report() { # report VERDICT EXIT [flags]
          gtt_mib: $gtt_base,
          temp_c: $temp_base
        },
-       startup: {
-         startup_ok: $startup_ok,
-         health_latency_ms: $health_ms,
-         gpu_layers: $gpu_layers
-       },
+startup: {
+          startup_ok: $startup_ok,
+          health_latency_ms: $health_ms,
+          gpu_layers: $gpu_layers,
+          offload_backend: (if $offload_backend == "" then null else $offload_backend end),
+          verbosity_flag: (if $verbosity_flag == "" then null else $verbosity_flag end),
+          device_buffer_mib: $device_buffer_mib,
+          host_buffer_mib: $host_buffer_mib,
+          model_buffer_mib: $model_buffer_mib
+        },
        window: {
          wall_clock_launch_ms: $wall_launch,
          uptime_launch_ms: $uptime_launch,
@@ -221,6 +307,18 @@ help_has_flag() {
   [[ "$help" =~ (^|[[:space:]])"$flag"([,[:space:]]|$) ]]
 }
 
+# -lv/--verbosity is required for a correct offload report: at default verbosity
+# llama.cpp does NOT emit "offloaded N/M layers to GPU", so the report would read
+# gpu_layers=0 while every layer was on the GPU. The flag appeared in 0.6.0-dev;
+# older builds may lack it, so we probe it and use it if present, otherwise warn.
+LV_FLAG=""
+if help_has_flag "$LLAMA_HELP" "-lv"; then
+  LV_FLAG="-lv 5"
+elif help_has_flag "$LLAMA_HELP" "--verbosity"; then
+  LV_FLAG="--verbosity 5"
+else
+  note "WARNING: llama-server lacks -lv/--verbosity; offload report may be silent"
+fi
 for flag in -ngl -c -ctk -ctv -np -fa -b -ub --jinja; do
   help_has_flag "$LLAMA_HELP" "$flag" || die "llama-server lacks required flag $flag" 65
 done
@@ -241,6 +339,7 @@ note "launching llama-server ctx=$CTX kv=$KV ngl=$NGL"
 T0=$(ms); WALL_LAUNCH=$T0; UPTIME_LAUNCH=$(uptime)
 "$LLAMA_BIN" -m "$MODEL_PATH" --host 0.0.0.0 --port "$PORT" \
   -c "$CTX" -ctk "$KV" -ctv "$KV" -ngl "$NGL" -np 1 -fa on -b 512 -ub 512 --jinja \
+  ${LV_FLAG:+$LV_FLAG} \
   >"$LLAMA_LOG" 2>&1 &
 PID=$!
 
@@ -253,7 +352,25 @@ done
 HEALTH_LATENCY_MS=$(( $(ms) - T0 ))
 
 GPU_LAYERS=$(grep -aoE 'offloaded [0-9]+/[0-9]+' "$LLAMA_LOG" 2>/dev/null | tail -1 | cut -d' ' -f2 | cut -d/ -f1 || true)
-[ -z "$GPU_LAYERS" ] && GPU_LAYERS=0
+# A layer count of "0/29" is a real observation (nothing was offloaded) and stays
+# 0. An absent line is an unknown and stays null. They must not look alike.
+if [ -n "$GPU_LAYERS" ]; then
+  if [ "$GPU_LAYERS" -gt 0 ] 2>/dev/null; then OFFLOAD_BACKEND=GPU; else OFFLOAD_BACKEND=CPU; fi
+else
+  GPU_LAYERS=null; OFFLOAD_BACKEND=""
+fi
+read_buffer_sizes "$LLAMA_LOG"
+# Keep the load log: it is the evidence every startup field was derived from,
+# and the working directory is otherwise removed on exit, which would leave an
+# archived campaign impossible to re-check. A failed copy becomes a flag so the
+# archive says why the log is missing.
+if [ -n "$LLAMA_SNAPSHOT" ]; then
+  if [ -f "$LLAMA_LOG" ] && [ -d "$(dirname "$LLAMA_SNAPSHOT")" ]; then
+    cp -f "$LLAMA_LOG" "$LLAMA_SNAPSHOT" 2>/dev/null || FLAGS=$(printf '%s' "$FLAGS" | jq -c '. + ["SNAPSHOT_COPY_FAILED"]')
+  else
+    FLAGS=$(printf '%s' "$FLAGS" | jq -c '. + ["SNAPSHOT_COPY_FAILED"]')
+  fi
+fi
 
 if [ "$STARTUP_OK" != true ]; then
   note "STARTUP_FAIL — server never became healthy"

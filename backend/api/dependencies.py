@@ -21,6 +21,61 @@ from .rag_engine import Indexer, LocalEmbeddingProvider, RAGEngine, Retriever
 
 # ── Concrete Implementations ──────────────────────────────────────────────────
 
+class LlamaCppClient:
+    """llama.cpp (API OpenAI-compatible) — implémentation du protocole LLMClient.
+
+    G2-T03 : implémentation unique du chemin actif. Le modèle est configuré
+    côté llama.cpp/systemd : ce client n'en connaît pas — aucun paramètre
+    « model », aucun settings LLAMA_MODEL (arbitrage XZ T03).
+    """
+
+    def __init__(self, base_url: str, options: dict):
+        self.base_url = base_url.rstrip("/")
+        self.options = options
+        import httpx
+        self._client = httpx.AsyncClient(timeout=180.0)
+
+    async def generate(self, prompt: str, system: str) -> str:
+        try:
+            response = await self._client.post(
+                f"{self.base_url}/v1/chat/completions",
+                json={
+                    **self.options,
+                    "messages": [
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": prompt},
+                    ],
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            try:
+                content = data["choices"][0]["message"]["content"]
+            except (KeyError, IndexError, TypeError):
+                return "Erreur : réponse llama.cpp vide"
+            if not isinstance(content, str) or not content:
+                return "Erreur : réponse llama.cpp vide"
+            return content
+        except Exception as e:
+            return f"Erreur lors de la génération : {e}"
+
+    async def check_health(self) -> bool:
+        try:
+            r = await self._client.get(f"{self.base_url}/health")
+            r.raise_for_status()
+            return True
+        except Exception:
+            return False
+
+    async def close(self) -> None:
+        await self._client.aclose()
+
+
+# ── Reliquat legacy (hors exécution v1.4) ─────────────────────────────────────
+# Ancien client Ollama : retiré du chemin actif en G2-T03 — get_llm_client()
+# retourne exclusivement LlamaCppClient. Conservé uniquement car le fixture
+# conftest « mock_httpx_client » référence encore ce nom ; suppression
+# définitive portée par G2-T11 (retrait du fixture).
 class OllamaLLMClient:
     """Ollama implementation of LLMClient protocol."""
 
@@ -339,16 +394,12 @@ def get_embedding_provider() -> EmbeddingProvider:
 def get_llm_client() -> LLMClient:
     settings = get_settings_cached()
     options = {
-        "temperature": settings.OLLAMA_TEMPERATURE,
-        "top_p": settings.OLLAMA_TOP_P,
-        "top_k": settings.OLLAMA_TOP_K,
-        "num_predict": settings.OLLAMA_NUM_PREDICT,
-        "num_ctx": settings.OLLAMA_NUM_CTX,
-        "num_thread": settings.OLLAMA_NUM_THREAD,
-        "num_gpu": settings.OLLAMA_NUM_GPU,
-        "f16_kv": settings.OLLAMA_F16_KV,
+        "temperature": settings.LLAMA_TEMPERATURE,
+        "top_p": settings.LLAMA_TOP_P,
+        "top_k": settings.LLAMA_TOP_K,
+        "max_tokens": settings.LLAMA_MAX_TOKENS,
     }
-    return OllamaLLMClient(settings.OLLAMA_HOST, settings.OLLAMA_MODEL, options)
+    return LlamaCppClient(settings.LLAMA_SERVER_URL, options)
 
 
 def get_rag_engine(
@@ -364,8 +415,6 @@ def get_rag_engine(
         db_url=settings.DATABASE_URL,
         embedding_provider=embedding_provider,
         llm_client=llm_client,
-        ollama_host=settings.OLLAMA_HOST,
-        model_name=settings.OLLAMA_MODEL,
     )
 
 

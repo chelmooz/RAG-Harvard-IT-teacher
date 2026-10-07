@@ -68,7 +68,7 @@ class TestSettingsValidation:
 
 
 class TestOllamaOptions:
-    """OllamaLLMClient lit ses options depuis config (validated point 3)."""
+    """get_llm_client() construit ses options depuis les settings llama.cpp (G2-T04)."""
 
     def test_get_llm_client_builds_options_from_settings(self):
         from api.config import get_settings
@@ -77,14 +77,10 @@ class TestOllamaOptions:
         settings = get_settings()
         client = get_llm_client()
         expected = {
-            "temperature": settings.OLLAMA_TEMPERATURE,
-            "top_p": settings.OLLAMA_TOP_P,
-            "top_k": settings.OLLAMA_TOP_K,
-            "num_predict": settings.OLLAMA_NUM_PREDICT,
-            "num_ctx": settings.OLLAMA_NUM_CTX,
-            "num_thread": settings.OLLAMA_NUM_THREAD,
-            "num_gpu": settings.OLLAMA_NUM_GPU,
-            "f16_kv": settings.OLLAMA_F16_KV,
+            "temperature": settings.LLAMA_TEMPERATURE,
+            "top_p": settings.LLAMA_TOP_P,
+            "top_k": settings.LLAMA_TOP_K,
+            "max_tokens": settings.LLAMA_MAX_TOKENS,
         }
         assert client.options == expected
 
@@ -92,14 +88,10 @@ class TestOllamaOptions:
         from api.config import get_settings
 
         s = get_settings()
-        assert s.OLLAMA_TEMPERATURE == 0.3
-        assert s.OLLAMA_TOP_P == 0.9
-        assert s.OLLAMA_TOP_K == 40
-        assert s.OLLAMA_NUM_PREDICT == 1024
-        assert s.OLLAMA_NUM_CTX == 4096
-        assert s.OLLAMA_NUM_THREAD == 6
-        assert s.OLLAMA_NUM_GPU == 99
-        assert s.OLLAMA_F16_KV is True
+        assert s.LLAMA_TEMPERATURE == 0.3
+        assert s.LLAMA_TOP_P == 0.9
+        assert s.LLAMA_TOP_K == 40
+        assert s.LLAMA_MAX_TOKENS == 1024
 
 
 # ════════════════════════════════════════════════════════════════════════════════

@@ -48,7 +48,7 @@ function Sidebar({ health, docStats, nav }) {
         <div className="label">Modèle actif</div>
         <div style={{ fontSize: 12, lineHeight: 1.8 }}>
           <span style={{ color: 'rgba(255,255,255,0.7)' }}>{health?.ollama || 'qwen3:14b'}</span><br />
-          <span style={{ color: 'rgba(255,255,255,0.4)' }}>{health?.gpu?.includes('ok') ? 'ROCm' : 'CPU'}</span><br />
+          <span style={{ color: 'rgba(255,255,255,0.4)' }}>{health?.gpu?.includes('ok') ? 'GPU' : 'CPU'}</span><br />
           <span style={{ color: '#00e5cc' }}>● En ligne</span>
         </div>
       </div>

@@ -22,7 +22,9 @@ niveau supérieur est un défaut, pas une variante.
    exécutable : `MemoryDenyWriteExecute=true` dans un service systemd **casse**
    l'initialisation Vulkan. Ne jamais l'ajouter.
 2. **Jamais `172.17.0.1`.** L'adresse du bridge `docker0` n'est pas garantie.
-   Utiliser le réseau déclaré `profia-llama` et la résolution `host-gateway`.
+   Utiliser le réseau déclaré `profia-llama` et sa gateway `172.30.50.1`.
+   **Pas `host-gateway`** : ce mécanisme résout vers `docker0` (`172.17.0.1`),
+   pas vers la gateway du réseau dédié — voir ADR-003.
 3. **Mesurer, ne pas seuiller.** Aucun seuil de débit, mémoire ou température ne
    conditionne une décision. `scripts/benchmark/fit_campaign.sh` rend un verdict
    par configuration et **n'encode aucun seuil**.

@@ -30,7 +30,13 @@ ExecStartPre=/bin/bash -c 'ip -4 addr show | grep -q "172.30.50.1/24" || { echo 
 ExecStartPre=/bin/bash -c 'test -r "${MODEL_DIR}/${MODEL_FILE}" || { echo "Modèle introuvable: ${MODEL_DIR}/${MODEL_FILE}"; exit 1; }'
 
 # Commande principale
-# -ngl 999 = offload max GPU (Vulkan), retombe en CPU si VRAM insuffisante
+# -ngl 999 = demande l'offload maximal sur le GPU via Vulkan.
+#   Comportement NON établi pour la mémoire insuffisante : la campagne de
+#   qualification réelle a utilisé le backend Vulkan de la machine de dév
+#   (NVIDIA via Vulkan) ; le service de production force RADV (AMD RDNA2).
+#   Aucun cas d'allocation échouée n'a été observé, donc rien ne prouve un
+#   repli automatique sur CPU. Le repli éventuel doit être qualifié sur la
+#   cible (BC-250, RDNA2/RADV), pas supposé ici.
 # -c 8192 = contexte initial 8K (passer à 16384 après validation mémoire)
 # -ctk q4_0 -ctv q4_0 = KV cache quantifié Q4_0 (économie mémoire)
 # -fa on = Flash Attention (si supporté par le driver)
