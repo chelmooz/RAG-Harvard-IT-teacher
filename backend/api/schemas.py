@@ -62,6 +62,6 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     database: str
-    ollama: str
+    llm: str
     gpu: str
     embedding_model: str

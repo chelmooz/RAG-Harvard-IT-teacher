@@ -136,12 +136,12 @@ async def health_check(
     except Exception as e:
         db_status = f"error: {e}"
 
-    # Ollama
+    # LLM
     try:
         await rag.check_llm_health()
-        ollama_status = f"ok ({settings.OLLAMA_MODEL})"
+        llm_status = "ok"
     except Exception as e:
-        ollama_status = f"unavailable: {e}"
+        llm_status = f"unavailable: {e}"
 
     # Embeddings : CPU en v1.4 (G2-T00). Le GPU de v1.4 est Vulkan/RADV et
     # tourne sur l'HÔTE via llama.cpp — il n'est pas visible depuis ce process.
@@ -157,7 +157,7 @@ async def health_check(
         status=overall,
         version=settings.APP_VERSION,
         database=db_status,
-        ollama=ollama_status,
+        llm=llm_status,
         gpu=gpu_status,
         embedding_model=settings.EMBEDDING_MODEL,
     )
@@ -291,7 +291,7 @@ async def chat(
     Pipeline RAG complet :
     1. Embeddings de la query sur GPU RDNA2
     2. Recherche HNSW dans pgvector
-    3. Génération Ollama avec contexte
+    3. Génération LLM avec contexte (llama.cpp)
     4. Persistance de la conversation en DB
     """
     t_start = time.monotonic()
@@ -322,7 +322,7 @@ async def chat(
             threshold=threshold,
             elapsed_ms=elapsed_ms,
             metier=request.metier,
-            model_name=settings.OLLAMA_MODEL,
+            model_name="",
         )
     ))
     # MT-02.04 : auto-évaluation branchée APRÈS la persistance (FK race évité
