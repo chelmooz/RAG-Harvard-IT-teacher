@@ -261,11 +261,13 @@ async def _eval_after_persist(
         return
 
     try:
-        async with httpx.AsyncClient(timeout=settings.EVAL_TIMEOUT_S) as client:
-            payload = await run_evaluation(
-                query=query, context=context or "", response=response,
-                client=client, conversation_id=conversation_id,
-            )
+        # Get the LLM client from dependency injection
+        from .dependencies import get_llm_client
+        llm_client = get_llm_client()
+        payload = await run_evaluation(
+            query=query, context=context or "", response=response,
+            client=llm_client, conversation_id=conversation_id,
+        )
         issues = build_issues(payload)
         pool = await get_db()
         async with pool.acquire() as conn:

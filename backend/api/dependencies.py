@@ -35,12 +35,13 @@ class LlamaCppClient:
         import httpx
         self._client = httpx.AsyncClient(timeout=180.0)
 
-    async def generate(self, prompt: str, system: str) -> str:
+    async def generate(self, prompt: str, system: str, options: dict | None = None) -> str:
+        merged_options = {**self.options, **(options or {})}
         try:
             response = await self._client.post(
                 f"{self.base_url}/v1/chat/completions",
                 json={
-                    **self.options,
+                    **merged_options,
                     "messages": [
                         {"role": "system", "content": system},
                         {"role": "user", "content": prompt},
@@ -69,13 +70,6 @@ class LlamaCppClient:
 
     async def close(self) -> None:
         await self._client.aclose()
-
-
-# ── Reliquat legacy (hors exécution v1.4) ─────────────────────────────────────
-# Ancien client Ollama : retiré du chemin actif en G2-T03 — get_llm_client()
-# retourne exclusivement LlamaCppClient. Conservé uniquement car le fixture
-# conftest « mock_httpx_client » référence encore ce nom ; suppression
-# définitive portée par G2-T11 (retrait du fixture).
 class OllamaLLMClient:
     """Ollama implementation of LLMClient protocol."""
 
